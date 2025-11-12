@@ -1,7 +1,5 @@
 import express from "express";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
 import {
   uploadFile,
   getUploadedFiles,
@@ -9,25 +7,13 @@ import {
   deleteFile,
   getFileById,
   updateFileMetadata,
+  viewFile,
 } from "../controllers/fileUploadController.js";
 import protect from "../middleware/authMiddleware.js";
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Create uploads directory if it doesn't exist
-    const uploadDir = "uploads/reports";
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Generate unique filename
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + "-" + file.originalname);
-  },
-});
+// Configure multer for file uploads using memory storage
+// Files will be stored in memory and then uploaded to GridFS
+const storage = multer.memoryStorage();
 
 // File filter for medical reports
 const fileFilter = (req, file, cb) => {
@@ -74,6 +60,11 @@ router.get("/files", getUploadedFiles);
 // @desc    Download a file
 // @access  Private
 router.get("/files/:reportId/:fileId/download", downloadFile);
+
+// @route   GET /api/upload/files/:reportId/:fileId/view
+// @desc    View a file inline
+// @access  Private
+router.get("/files/:reportId/:fileId/view", viewFile);
 
 // @route   DELETE /api/upload/files/:reportId/:fileId
 // @desc    Delete a file

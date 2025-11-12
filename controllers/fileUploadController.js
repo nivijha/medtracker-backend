@@ -1,5 +1,4 @@
-import fs from "fs";
-import path from "path";
+import { GridFSBucket } from "mongodb";
 import Report from "../models/Report.js";
 import mongoose from "mongoose";
 
@@ -15,20 +14,31 @@ export const uploadFile = async (req, res) => {
 
     const { reportId, description, category, doctorName, reportDate } = req.body;
     const userId = req.user.id;
-
-    // Create file path
     const file = req.file;
+
+    // Initialize GridFS bucket
+    const db = mongoose.connection.db;
+    const bucket = new GridFSBucket(db, { bucketName: 'reports' });
+
+    // Create a unique filename
     const fileName = `${Date.now()}-${file.originalname}`;
-    const filePath = path.join("uploads", "reports", fileName);
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = path.dirname(filePath);
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
+    // Create upload stream to GridFS
+    const uploadStream = bucket.openUploadStream(fileName, {
+      metadata: {
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        uploadedBy: userId,
+        uploadDate: new Date(),
+      },
+    });
 
-    // Move file to uploads directory
-    fs.renameSync(file.path, filePath);
+    // Store file in GridFS
+    await new Promise((resolve, reject) => {
+      uploadStream.end(file.buffer);
+      uploadStream.on('finish', resolve);
+      uploadStream.on('error', reject);
+    });
 
     // Find or create report
     let report;
@@ -49,7 +59,7 @@ export const uploadFile = async (req, res) => {
       report.documents.push({
         fileName,
         originalName: file.originalname,
-        filePath,
+        fileId: uploadStream.id,
         size: file.size,
         mimeType: file.mimetype,
         uploadDate: new Date(),
@@ -74,7 +84,7 @@ export const uploadFile = async (req, res) => {
         documents: [{
           fileName,
           originalName: file.originalname,
-          filePath,
+          fileId: uploadStream.id,
           size: file.size,
           mimeType: file.mimetype,
           uploadDate: new Date(),
@@ -124,6 +134,8 @@ export const getUploadedFiles = async (req, res) => {
         report.documents.forEach(doc => {
           allFiles.push({
             reportId: report._id,
+            fileId: doc._id, // Use the subdocument ID as fileId for finding the document
+            gridFSId: doc.fileId, // Store the GridFS ID separately for file operations
             reportType: report.reportType,
             reportDate: report.date,
             doctorName: report.doctorName,
@@ -135,11 +147,13 @@ export const getUploadedFiles = async (req, res) => {
             mimeType: doc.mimeType,
             uploadDate: doc.uploadDate,
             fileDescription: doc.description,
+            status: report.status || 'pending', // Add status field
           });
         });
       }
     });
 
+    console.log("Final files array being sent:", allFiles); // Debug log
     res.json({
       files: allFiles,
       pagination: {
@@ -182,17 +196,71 @@ export const downloadFile = async (req, res) => {
       return res.status(404).json({ message: "File not found" });
     }
     
-    // Check if file exists
-    if (!fs.existsSync(file.filePath)) {
-      return res.status(404).json({ message: "File not found on server" });
-    }
+    // Initialize GridFS bucket
+    const db = mongoose.connection.db;
+    const bucket = new GridFSBucket(db, { bucketName: 'reports' });
     
     // Set headers for file download
     res.setHeader("Content-Disposition", `attachment; filename="${file.originalName}"`);
     res.setHeader("Content-Type", file.mimeType || "application/octet-stream");
     
-    // Send file
-    res.sendFile(path.resolve(file.filePath));
+    // Stream file from GridFS
+    const downloadStream = bucket.openDownloadStream(file.fileId);
+    downloadStream.pipe(res);
+    
+    downloadStream.on('error', (error) => {
+      console.error('Download error:', error);
+      res.status(500).json({ message: "Error downloading file" });
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+// @desc    View a file (inline display)
+// @route   GET /api/upload/files/:reportId/:fileId/view
+// @access  Private
+export const viewFile = async (req, res) => {
+  try {
+    const { reportId, fileId } = req.params;
+    const userId = req.user.id;
+
+    // Find report
+    const report = await Report.findById(reportId);
+    
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+    
+    // Check if report belongs to user
+    if (report.patientName !== userId) {
+      return res.status(401).json({ message: "Not authorized" });
+    }
+    
+    // Find file in report
+    const file = report.documents.id(fileId);
+    
+    if (!file) {
+      return res.status(404).json({ message: "File not found" });
+    }
+    
+    // Initialize GridFS bucket
+    const db = mongoose.connection.db;
+    const bucket = new GridFSBucket(db, { bucketName: 'reports' });
+    
+    // Set headers for inline viewing (not download)
+    res.setHeader("Content-Disposition", `inline; filename="${file.originalName}"`);
+    res.setHeader("Content-Type", file.mimeType || "application/octet-stream");
+    
+    // Stream file from GridFS
+    const downloadStream = bucket.openDownloadStream(file.fileId);
+    downloadStream.pipe(res);
+    
+    downloadStream.on('error', (error) => {
+      console.error('View error:', error);
+      res.status(500).json({ message: "Error viewing file" });
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server Error", error: error.message });
@@ -226,10 +294,12 @@ export const deleteFile = async (req, res) => {
       return res.status(404).json({ message: "File not found" });
     }
     
-    // Delete file from filesystem
-    if (fs.existsSync(file.filePath)) {
-      fs.unlinkSync(file.filePath);
-    }
+    // Initialize GridFS bucket
+    const db = mongoose.connection.db;
+    const bucket = new GridFSBucket(db, { bucketName: 'reports' });
+    
+    // Delete file from GridFS
+    await bucket.delete(file.fileId);
     
     // Remove file from report
     report.documents.pull(fileId);
