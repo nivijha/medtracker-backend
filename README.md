@@ -1,201 +1,256 @@
 # MedTracker Backend
 
-A robust Node.js backend API for medical tracking and management system. This application provides secure authentication, user management, and comprehensive medical reporting features.
+A comprehensive backend for the MedTracker application, built with Node.js, Express, and MongoDB.
 
-## 📋 Table of Contents
+## Features
 
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Environment Variables](#environment-variables)
-- [Running the Application](#running-the-application)
-- [API Endpoints](#api-endpoints)
-- [Authentication](#authentication)
-- [Models](#models)
-- [Contributing](#contributing)
+- **Authentication & Authorization**
+  - User registration and login
+  - JWT-based authentication
+  - Password hashing with bcrypt
+  - Role-based access control (patient, doctor, admin, pharmacist)
 
-## ✨ Features
+- **User Management**
+  - Complete user profiles with medical information
+  - Preferences management
+  - Security settings
+  - Provider relationships
 
-- **User Authentication**: Secure user registration and login with JWT
-- **User Management**: Complete CRUD operations for user profiles
-- **Medical Reports**: Create, read, update, and delete medical reports
-- **Test Management**: Track and manage medical test records
-- **Middleware Protection**: Route protection with authentication middleware
-- **Database Integration**: Structured data models for users, reports, and tests
+- **Medication Management**
+  - CRUD operations for medications
+  - Medication reminders
+  - Refill tracking
+  - Interaction checking
 
-## 🚀 Tech Stack
+- **Appointment Management**
+  - Appointment scheduling and management
+  - Doctor availability checking
+  - Appointment reminders
+  - Rescheduling and cancellation
 
-- **Runtime**: Node.js
-- **Framework**: Express.js
-- **Database**: MongoDB (assumed based on typical Node.js structure)
-- **Authentication**: JWT (JSON Web Tokens)
-- **Language**: JavaScript (ES6+)
+- **Prescription Management**
+  - Prescription tracking
+  - Refill processing
+  - Transfer between pharmacies
+  - Expiration tracking
 
-## 📁 Project Structure
+- **Health Metrics Tracking**
+  - Vital signs tracking (blood pressure, heart rate, temperature, etc.)
+  - Weight and BMI tracking
+  - Health trends visualization
+  - Abnormal value alerts
 
-```
-medtracker-backend/
-├── config/
-│   └── db.js                 # Database configuration
-├── controllers/
-│   ├── authController.js     # Authentication logic
-│   └── userController.js     # User management logic
-├── middleware/
-│   └── authMiddleware.js     # JWT authentication middleware
-├── models/
-│   ├── Report.js             # Medical report schema
-│   ├── Test.js               # Medical test schema
-│   └── User.js               # User schema
-├── routes/
-│   ├── authRoutes.js         # Authentication routes
-│   ├── reportRoutes.js       # Report management routes
-│   └── testRoutes.js         # Test management routes
-├── node_modules/             # Dependencies
-├── .env                      # Environment variables
-├── .gitignore               # Git ignore file
-├── index.js                 # Application entry point
-├── middleware.js            # Global middleware configuration
-├── package.json             # Project dependencies
-└── package-lock.json        # Locked dependencies
-```
+- **Doctor Management**
+  - Doctor profiles and verification
+  - Specialty and availability management
+  - Patient reviews and ratings
+  - Practice information
 
-## 📦 Prerequisites
+- **File Upload**
+  - Medical report upload and management
+  - File download and deletion
+  - Metadata management
 
-Before you begin, ensure you have the following installed:
+- **Data Export**
+  - Export user data in multiple formats (JSON, CSV, PDF)
+  - Selective data export
+  - Export history tracking
 
-- **Node.js** (v14 or higher)
-- **npm** 
-- **MongoDB** (local or cloud instance)
+- **Notifications**
+  - In-app notifications
+  - Medication reminders
+  - Appointment reminders
+  - Refill reminders
+  - Health alerts
 
-## 🔧 Installation
+- **Data Visualization**
+  - Health metrics trends
+  - Medication adherence charts
+  - Appointment statistics
+  - Dashboard summaries
 
-1. **Clone the repository**
+## API Endpoints
 
+### Authentication
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `GET /api/auth/me` - Get current user
+
+### User Profile
+- `GET /api/profile` - Get user profile
+- `PUT /api/profile` - Update user profile
+- `PUT /api/profile/preferences` - Update preferences
+- `PUT /api/profile/security` - Update security settings
+- `POST /api/profile/providers` - Add provider
+- `DELETE /api/profile/providers/:providerId` - Remove provider
+- `GET /api/profile/health-summary` - Get health summary
+- `DELETE /api/profile` - Delete account
+
+### Medications
+- `GET /api/medications` - Get all medications
+- `GET /api/medications/:id` - Get single medication
+- `POST /api/medications` - Create medication
+- `PUT /api/medications/:id` - Update medication
+- `DELETE /api/medications/:id` - Delete medication
+- `GET /api/medications/refill-soon` - Get medications needing refill
+- `GET /api/medications/schedule` - Get today's medication schedule
+- `POST /api/medications/:id/take` - Mark medication as taken
+- `POST /api/medications/check-interactions` - Check medication interactions
+- `GET /api/medications/adherence` - Get medication adherence
+
+### Appointments
+- `GET /api/appointments` - Get all appointments
+- `GET /api/appointments/:id` - Get single appointment
+- `POST /api/appointments` - Create appointment
+- `PUT /api/appointments/:id` - Update appointment
+- `PUT /api/appointments/:id/cancel` - Cancel appointment
+- `DELETE /api/appointments/:id` - Delete appointment
+- `GET /api/appointments/upcoming` - Get upcoming appointments
+- `GET /api/appointments/past` - Get past appointments
+- `GET /api/appointments/available-slots` - Get available time slots
+- `PUT /api/appointments/:id/reschedule` - Reschedule appointment
+
+### Prescriptions
+- `GET /api/prescriptions` - Get all prescriptions
+- `GET /api/prescriptions/:id` - Get single prescription
+- `POST /api/prescriptions` - Create prescription
+- `PUT /api/prescriptions/:id` - Update prescription
+- `DELETE /api/prescriptions/:id` - Delete prescription
+- `GET /api/prescriptions/active` - Get active prescriptions
+- `GET /api/prescriptions/refill-needed` - Get prescriptions needing refill
+- `POST /api/prescriptions/:id/refill` - Process refill
+- `POST /api/prescriptions/check-interactions` - Check prescription interactions
+- `POST /api/prescriptions/:id/transfer` - Transfer prescription
+
+### Health Metrics
+- `GET /api/health-metrics` - Get all health metrics
+- `GET /api/health-metrics/:id` - Get single health metric
+- `POST /api/health-metrics` - Create health metric
+- `PUT /api/health-metrics/:id` - Update health metric
+- `DELETE /api/health-metrics/:id` - Delete health metric
+- `GET /api/health-metrics/summary` - Get health metrics summary
+- `GET /api/health-metrics/trends` - Get health trends
+- `GET /api/health-metrics/bmi` - Get BMI history
+
+### Doctors
+- `GET /api/doctors` - Get all doctors
+- `GET /api/doctors/:id` - Get single doctor
+- `POST /api/doctors` - Create doctor (admin only)
+- `PUT /api/doctors/:id` - Update doctor
+- `DELETE /api/doctors/:id` - Delete doctor (admin only)
+- `PUT /api/doctors/:id/verify` - Verify doctor (admin only)
+- `GET /api/doctors/:id/availability` - Get doctor availability
+- `POST /api/doctors/:id/reviews` - Add doctor review
+- `GET /api/doctors/specialties` - Get all specialties
+- `GET /api/doctors/top-rated` - Get top rated doctors
+
+### File Upload
+- `POST /api/upload` - Upload file
+- `GET /api/upload/files` - Get all uploaded files
+- `GET /api/upload/files/:reportId/:fileId/download` - Download file
+- `DELETE /api/upload/files/:reportId/:fileId` - Delete file
+- `GET /api/upload/files/:reportId/:fileId` - Get file by ID
+- `PUT /api/upload/files/:reportId/:fileId` - Update file metadata
+
+### Data Export
+- `POST /api/export` - Export user data
+- `GET /api/export/history` - Get export history
+
+### Medication Interactions
+- `POST /api/medication-interactions/check` - Check medication interactions
+- `POST /api/medication-interactions/check-prescriptions` - Check prescription interactions
+- `POST /api/medication-interactions/check-mixed` - Check mixed interactions
+- `GET /api/medication-interactions/:medicationId` - Get medication interactions
+- `POST /api/medication-interactions/:medicationId/interactions` - Add interaction
+- `DELETE /api/medication-interactions/:medicationId/interactions/:interactionId` - Remove interaction
+- `GET /api/medication-interactions/common` - Get common interactions
+
+### Notifications
+- `GET /api/notifications` - Get all notifications
+- `GET /api/notifications/:id` - Get single notification
+- `PUT /api/notifications/:id/read` - Mark notification as read
+- `PUT /api/notifications/read-all` - Mark all notifications as read
+- `DELETE /api/notifications/:id` - Delete notification
+- `POST /api/notifications/medication-reminders` - Create medication reminders
+- `POST /api/notifications/appointment-reminders` - Create appointment reminders
+- `POST /api/notifications/refill-reminders` - Create refill reminders
+- `POST /api/notifications/test` - Send test notification
+
+### Data Visualization
+- `GET /api/visualization/health-trends` - Get health metrics trends
+- `GET /api/visualization/medication-adherence` - Get medication adherence
+- `GET /api/visualization/appointment-stats` - Get appointment statistics
+- `GET /api/visualization/dashboard` - Get dashboard summary
+
+## Installation
+
+1. Clone the repository:
 ```bash
-git clone https://github.com/nivijha/medtracker-backend.git
+git clone https://github.com/your-username/medtracker-backend.git
 cd medtracker-backend
 ```
 
-2. **Install dependencies**
-
+2. Install dependencies:
 ```bash
 npm install
 ```
 
-## 🔐 Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
-
-```env
-# Server Configuration
-PORT=5000
-NODE_ENV=development
-
-# Database
-MONGODB_URI=mongodb://localhost:27017/medtracker
-# Or for MongoDB Atlas:
-# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/medtracker
-
-# JWT Secret
-JWT_SECRET=your_super_secret_jwt_key_here
-JWT_EXPIRE=7d
-
-# Optional: CORS Configuration
-CLIENT_URL=http://localhost:3000
-```
-
-## 🏃 Running the Application
-
-### Development Mode
-
+3. Set up environment variables:
 ```bash
-npm run dev
+cp .env.example .env
+# Edit .env with your configuration
 ```
 
-### Production Mode
-
+4. Start the server:
 ```bash
 npm start
 ```
 
-The server will start on `http://localhost:5000` (or your configured PORT).
-
-## 🛣️ API Endpoints
-
-### Authentication Routes (`/api/auth`)
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/auth/register` | Register new user | No |
-| POST | `/api/auth/login` | User login | No |
-| GET | `/api/auth/me` | Get current user | Yes |
-| POST | `/api/auth/logout` | User logout | Yes |
-
-### User Routes (`/api/users`)
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/users` | Get all users | Yes |
-| GET | `/api/users/:id` | Get user by ID | Yes |
-| PUT | `/api/users/:id` | Update user | Yes |
-| DELETE | `/api/users/:id` | Delete user | Yes |
-
-### Report Routes (`/api/reports`)
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/reports` | Get all reports | Yes |
-| GET | `/api/reports/:id` | Get report by ID | Yes |
-| POST | `/api/reports` | Create new report | Yes |
-| PUT | `/api/reports/:id` | Update report | Yes |
-| DELETE | `/api/reports/:id` | Delete report | Yes |
-
-### Test Routes (`/api/tests`)
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/tests` | Get all tests | Yes |
-| GET | `/api/tests/:id` | Get test by ID | Yes |
-| POST | `/api/tests` | Create new test | Yes |
-| PUT | `/api/tests/:id` | Update test | Yes |
-| DELETE | `/api/tests/:id` | Delete test | Yes |
-
-## 🔒 Authentication
-
-This API uses JWT (JSON Web Tokens) for authentication. Include the token in the Authorization header for protected routes:
-
-```
-Authorization: Bearer <your_jwt_token>
+For development:
+```bash
+npm run dev
 ```
 
-## 📊 Models
+## Environment Variables
 
-### User Model
-- Email
-- Password (hashed)
-- Name
-- Role
-- Created/Updated timestamps
+Create a `.env` file in the root directory with the following variables:
 
-### Report Model
-- User reference
-- Report details
-- Test results
-- Date
-- Status
+```
+NODE_ENV=development
+PORT=5000
+MONGODB_URI=mongodb://localhost:27017/medtracker
+JWT_SECRET=your_jwt_secret_key
+```
 
-### Test Model
-- Test name
-- Test type
-- Results
-- Reference ranges
-- Date performed
+## Database Schema
 
-## 🤝 Contributing
+The application uses MongoDB with the following collections:
 
-Contributions are welcome! Please follow these steps:
+- **users** - User accounts and profiles
+- **medications** - Medication information
+- **appointments** - Appointment details
+- **prescriptions** - Prescription records
+- **healthmetrics** - Health metrics data
+- **doctors** - Doctor profiles
+- **reports** - Medical reports
+- **notifications** - User notifications
+
+## Security
+
+- Passwords are hashed using bcrypt
+- JWT tokens are used for authentication
+- Role-based access control
+- Input validation and sanitization
+- Rate limiting (recommended for production)
+
+## Testing
+
+Run the test suite:
+```bash
+npm test
+```
+
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
@@ -203,10 +258,6 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 🔗 Links
+## License
 
-- [Frontend Repository](https://github.com/nivijha/medtracker-frontend)
-
----
-
-**Note**: Make sure to never commit your `.env` file to version control. It's already included in `.gitignore` for security purposes.
+This project is licensed under the MIT License.
