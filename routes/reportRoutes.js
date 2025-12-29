@@ -1,28 +1,38 @@
 import express from "express";
-import Report from "../models/Report.js";
+import {
+  uploadReport,
+  getMyReports,
+  deleteReport,
+} from "../controllers/reportController.js";
+import protect from "../middleware/authMiddleware.js";
+import upload from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
 
-// GET all reports
-router.get("/", async (req, res) => {
-  try {
-    const reports = await Report.find();
-    res.json(reports);
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
+/**
+ * @route   POST /api/reports/upload
+ * @desc    Upload a medical report (patient only)
+ * @access  Private
+ */
+router.post(
+  "/upload",
+  protect,
+  upload.single("file"), // key must be "file"
+  uploadReport
+);
 
-// POST a new report (for testing)
-router.post("/add", async (req, res) => {
-  try {
-    const { patientName, reportType, doctorName } = req.body;
-    const report = new Report({ patientName, reportType, doctorName });
-    await report.save();
-    res.status(201).json({ message: "Report added", report });
-  } catch (err) {
-    res.status(500).json({ message: "Error adding report", error: err.message });
-  }
-});
+/**
+ * @route   GET /api/reports/my
+ * @desc    Get logged-in user's reports
+ * @access  Private
+ */
+router.get("/my", protect, getMyReports);
+
+/**
+ * @route   DELETE /api/reports/:id
+ * @desc    Delete a report (owner only)
+ * @access  Private
+ */
+router.delete("/:id", protect, deleteReport);
 
 export default router;
