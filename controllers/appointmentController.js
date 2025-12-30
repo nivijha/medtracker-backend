@@ -1,30 +1,23 @@
+import Appointment from "../models/Appointment.js";
+
+export const getAppointments = async (req, res) => {
+  const appointments = await Appointment.find({ userId: req.user.id })
+    .sort({ date: 1 });
+
+  res.json({ appointments });
+};
+
 export const createAppointment = async (req, res) => {
-  try {
-    const {
-      doctorName,
-      specialty,
-      hospital,
-      date,
-      time,
-      notes,
-    } = req.body;
+  const appointment = await Appointment.create({
+    userId: req.user.id,
+    doctorName: req.body.doctorName,
+    specialty: req.body.specialty,
+    hospital: req.body.hospital,
+    date: req.body.date,
+    time: req.body.time,
+    notes: req.body.notes,
+    status: "scheduled"
+  });
 
-    if (!doctorName || !date || !time) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    const appointment = await Appointment.create({
-      userId: req.user._id,
-      doctorName,
-      specialty,
-      hospital,
-      date,
-      time,
-      notes,
-    });
-
-    res.status(201).json({ appointment });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to create appointment" });
-  }
+  res.status(201).json({ appointment });
 };
