@@ -1,57 +1,70 @@
 import Appointment from "../models/Appointment.js";
 
-const getAppointmentDateTime = (appointment) => {
-  const dateStr = appointment.date.toISOString().split("T")[0];
-  return new Date(`${dateStr}T${appointment.time}`);
-};
-
+/* ---------------- GET UPCOMING ---------------- */
 export const getUpcomingAppointments = async (req, res) => {
-  const now = new Date();
+  try {
+    const now = new Date();
 
-  const appointments = await Appointment.find({
-    userId: req.user.id,
-    appointmentDateTime: { $gte: now },
-    status: { $ne: "cancelled" },
-  });
+    const appointments = await Appointment.find({
+      userId: req.user.id,
+      appointmentDateTime: { $gte: now },
+      status: { $ne: "cancelled" },
+    }).sort({ appointmentDateTime: 1 });
 
-  res.json({ appointments });
+    res.json({ appointments });
+  } catch (error) {
+    console.error("Upcoming appointments error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
+/* ---------------- GET PAST ---------------- */
 export const getPastAppointments = async (req, res) => {
-  const now = new Date();
+  try {
+    const now = new Date();
 
-  const appointments = await Appointment.find({
-    userId: req.user.id,
-    $or: [
-      { appointmentDateTime: { $lt: now } },
-      { status: "cancelled" },
-    ],
-  });
+    const appointments = await Appointment.find({
+      userId: req.user.id,
+      $or: [
+        { appointmentDateTime: { $lt: now } },
+        { status: "cancelled" },
+      ],
+    }).sort({ appointmentDateTime: -1 });
 
-  res.json({ appointments });
+    res.json({ appointments });
+  } catch (error) {
+    console.error("Past appointments error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
+/* ---------------- GET ALL ---------------- */
 export const getAppointments = async (req, res) => {
-  const appointments = await Appointment.find({
-    userId: req.user.id,
-  }).sort({ appointmentDateTime: 1 });
+  try {
+    const appointments = await Appointment.find({
+      userId: req.user.id,
+    }).sort({ appointmentDateTime: 1 });
 
-  res.json({ appointments });
+    res.json({ appointments });
+  } catch (error) {
+    console.error("Get appointments error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
+/* ---------------- CREATE ---------------- */
 export const createAppointment = async (req, res) => {
   try {
     const { doctorName, specialty, hospital, date, time, notes } = req.body;
 
-    if (!date || !time) {
-      return res.status(400).json({ message: "Date and time required" });
+    if (!doctorName || !date || !time) {
+      return res
+        .status(400)
+        .json({ message: "Doctor, date and time are required" });
     }
 
-    const appointmentDateTime = new Date(`${date}T${time}`);
-
-    if (isNaN(appointmentDateTime.getTime())) {
-      return res.status(400).json({ message: "Invalid date or time" });
-    }
+    // IST → UTC conversion
+    const appointmentDateTime = new Date(`${date}T${time}:00+05:30`);
 
     const appointment = await Appointment.create({
       userId: req.user.id,
@@ -64,12 +77,13 @@ export const createAppointment = async (req, res) => {
     });
 
     res.status(201).json({ appointment });
-  } catch (err) {
-    console.error("Create appointment error:", err);
+  } catch (error) {
+    console.error("Create appointment error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+/* ---------------- CANCEL ---------------- */
 export const cancelAppointment = async (req, res) => {
   try {
     const appointment = await Appointment.findOne({
@@ -91,6 +105,7 @@ export const cancelAppointment = async (req, res) => {
   }
 };
 
+/* ---------------- DELETE ---------------- */
 export const deleteAppointment = async (req, res) => {
   try {
     const appointment = await Appointment.findOne({
@@ -99,20 +114,13 @@ export const deleteAppointment = async (req, res) => {
     });
 
     if (!appointment) {
-      return res.status(404).json({
-        message: "Appointment not found",
-      });
+      return res.status(404).json({ message: "Appointment not found" });
     }
 
     await appointment.deleteOne();
-
-    res.json({
-      message: "Appointment deleted successfully",
-    });
+    res.json({ message: "Appointment deleted successfully" });
   } catch (error) {
     console.error("Delete appointment error:", error);
-    res.status(500).json({
-      message: "Server error while deleting appointment",
-    });
+    res.status(500).json({ message: "Server error" });
   }
 };
