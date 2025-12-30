@@ -3,7 +3,6 @@ import protect from "../middleware/authMiddleware.js";
 import {
   createAppointment,
   getAppointments,
-  updateAppointment,
   cancelAppointment,
   deleteAppointment
 } from "../controllers/appointmentController.js";
@@ -14,7 +13,6 @@ router.use(protect);
 
 router.post("/", createAppointment);
 router.get("/", getAppointments);
-router.put("/:id", updateAppointment);
 router.put("/:id/cancel", cancelAppointment);
 router.delete("/:id", deleteAppointment);
 
