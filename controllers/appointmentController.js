@@ -1,5 +1,52 @@
 import Appointment from "../models/Appointment.js";
 
+const getAppointmentDateTime = (appointment) => {
+  const dateStr = appointment.date.toISOString().split("T")[0];
+  return new Date(`${dateStr}T${appointment.time}`);
+};
+
+export const getUpcomingAppointments = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const appointments = await Appointment.find({
+      userId: req.user.id,
+      status: { $ne: "cancelled" }
+    });
+
+    const upcoming = appointments.filter((a) => {
+      const appointmentDateTime = getAppointmentDateTime(a);
+      return appointmentDateTime >= now;
+    });
+
+    res.json(upcoming);
+  } catch (error) {
+    console.error("Upcoming appointments error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getPastAppointments = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const appointments = await Appointment.find({
+      userId: req.user.id
+    });
+
+    const past = appointments.filter((a) => {
+      const appointmentDateTime = getAppointmentDateTime(a);
+      return appointmentDateTime < now;
+    });
+
+    res.json({ appointments: past });
+  } catch (error) {
+    console.error("Past appointments error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
 export const getAppointments = async (req, res) => {
   const appointments = await Appointment.find({ userId: req.user.id })
     .sort({ date: 1 });
