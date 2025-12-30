@@ -27,6 +27,9 @@ const uploadReport = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+
+  console.log("REQ FILE:", req.file);
+  console.log("REQ BODY:", req.body);
 };
 
 const getMyReports = async (req, res) => {
@@ -64,6 +67,5 @@ const deleteReport = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 export { uploadReport, getMyReports, deleteReport };
