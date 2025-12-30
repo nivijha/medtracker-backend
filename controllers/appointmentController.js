@@ -43,3 +43,28 @@ export const cancelAppointment = async (req, res) => {
   }
 };
 
+export const deleteAppointment = async (req, res) => {
+  try {
+    const appointment = await Appointment.findOne({
+      _id: req.params.id,
+      userId: req.user.id, 
+    });
+
+    if (!appointment) {
+      return res.status(404).json({
+        message: "Appointment not found",
+      });
+    }
+
+    await appointment.deleteOne();
+
+    res.json({
+      message: "Appointment deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete appointment error:", error);
+    res.status(500).json({
+      message: "Server error while deleting appointment",
+    });
+  }
+};
