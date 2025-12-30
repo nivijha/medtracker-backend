@@ -6,68 +6,68 @@ const getAppointmentDateTime = (appointment) => {
 };
 
 export const getUpcomingAppointments = async (req, res) => {
-  try {
-    const now = new Date();
+  const now = new Date();
 
-    const appointments = await Appointment.find({
-      userId: req.user.id,
-      status: { $ne: "cancelled" },
-    });
-
-    const upcoming = appointments.filter((a) => {
-      const appointmentDateTime = getAppointmentDateTime(a);
-      return appointmentDateTime >= now;
-    });
-
-    res.json(upcoming);
-  } catch (error) {
-    console.error("Upcoming appointments error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-export const getPastAppointments = async (req, res) => {
-  try {
-    const now = new Date();
-
-    const appointments = await Appointment.find({
-      userId: req.user.id,
-    });
-
-    const past = appointments.filter((a) => {
-      const appointmentDateTime = getAppointmentDateTime(a);
-      return appointmentDateTime < now;
-    });
-
-    res.json({ appointments: past });
-  } catch (error) {
-    console.error("Past appointments error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-export const getAppointments = async (req, res) => {
-  const appointments = await Appointment.find({ userId: req.user.id }).sort({
-    date: 1,
+  const appointments = await Appointment.find({
+    userId: req.user.id,
+    appointmentDateTime: { $gte: now },
+    status: { $ne: "cancelled" },
   });
 
   res.json({ appointments });
 };
 
-export const createAppointment = async (req, res) => {
-  const appointmentDateTime = new Date(`${date}T${time}`);
-  const appointment = await Appointment.create({
+export const getPastAppointments = async (req, res) => {
+  const now = new Date();
+
+  const appointments = await Appointment.find({
     userId: req.user.id,
-    doctorName: req.body.doctorName,
-    specialty: req.body.specialty,
-    hospital: req.body.hospital,
-    date: req.body.date,
-    time: req.body.time,
-    notes: req.body.notes,
-    status: "scheduled",
+    $or: [
+      { appointmentDateTime: { $lt: now } },
+      { status: "cancelled" },
+    ],
   });
 
-  res.status(201).json({ appointment });
+  res.json({ appointments });
+};
+
+export const getAppointments = async (req, res) => {
+  const appointments = await Appointment.find({
+    userId: req.user.id,
+  }).sort({ appointmentDateTime: 1 });
+
+  res.json({ appointments });
+};
+
+export const createAppointment = async (req, res) => {
+  try {
+    const { doctorName, specialty, hospital, date, time, notes } = req.body;
+
+    if (!date || !time) {
+      return res.status(400).json({ message: "Date and time required" });
+    }
+
+    const appointmentDateTime = new Date(`${date}T${time}`);
+
+    if (isNaN(appointmentDateTime.getTime())) {
+      return res.status(400).json({ message: "Invalid date or time" });
+    }
+
+    const appointment = await Appointment.create({
+      userId: req.user.id,
+      doctorName,
+      specialty,
+      hospital,
+      appointmentDateTime,
+      notes,
+      status: "scheduled",
+    });
+
+    res.status(201).json({ appointment });
+  } catch (err) {
+    console.error("Create appointment error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 export const cancelAppointment = async (req, res) => {
