@@ -11,7 +11,7 @@ export const getUpcomingAppointments = async (req, res) => {
 
     const appointments = await Appointment.find({
       userId: req.user.id,
-      status: { $ne: "cancelled" }
+      status: { $ne: "cancelled" },
     });
 
     const upcoming = appointments.filter((a) => {
@@ -31,7 +31,7 @@ export const getPastAppointments = async (req, res) => {
     const now = new Date();
 
     const appointments = await Appointment.find({
-      userId: req.user.id
+      userId: req.user.id,
     });
 
     const past = appointments.filter((a) => {
@@ -46,15 +46,16 @@ export const getPastAppointments = async (req, res) => {
   }
 };
 
-
 export const getAppointments = async (req, res) => {
-  const appointments = await Appointment.find({ userId: req.user.id })
-    .sort({ date: 1 });
+  const appointments = await Appointment.find({ userId: req.user.id }).sort({
+    date: 1,
+  });
 
   res.json({ appointments });
 };
 
 export const createAppointment = async (req, res) => {
+  const appointmentDateTime = new Date(`${date}T${time}`);
   const appointment = await Appointment.create({
     userId: req.user.id,
     doctorName: req.body.doctorName,
@@ -63,7 +64,7 @@ export const createAppointment = async (req, res) => {
     date: req.body.date,
     time: req.body.time,
     notes: req.body.notes,
-    status: "scheduled"
+    status: "scheduled",
   });
 
   res.status(201).json({ appointment });
@@ -94,7 +95,7 @@ export const deleteAppointment = async (req, res) => {
   try {
     const appointment = await Appointment.findOne({
       _id: req.params.id,
-      userId: req.user.id, 
+      userId: req.user.id,
     });
 
     if (!appointment) {
