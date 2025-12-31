@@ -9,8 +9,7 @@ import testRoutes from "./routes/testRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import appointmentRoutes from "./routes/appointmentRoutes.js";
-
-
+import medicationRoutes from "./routes/medicationRoutes.js";
 
 
 // Initialize app
@@ -45,6 +44,7 @@ app.use("/api/test", testRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/appointments", appointmentRoutes);
+app.use("/api/medications", medicationRoutes);
 
 // Start server
 const PORT = process.env.PORT || 5000;

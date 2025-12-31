@@ -5,32 +5,61 @@ const medicationSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true
+      required: true,
     },
 
     name: {
       type: String,
-      required: true
+      required: true,
     },
 
     dosage: {
       type: String,
-      required: true
+      required: true,
     },
 
     frequency: {
       type: String,
-      required: true
+      required: true,
+    },
+
+    time: {
+      type: String, // "08:00 AM"
+      required: true,
+    },
+
+    prescribedBy: {
+      type: String,
+      required: true,
     },
 
     startDate: {
       type: Date,
-      required: true
+      required: true,
     },
 
     endDate: {
-      type: Date
-    }
+      type: Date,
+    },
+
+    nextRefill: {
+      type: Date,
+    },
+
+    notes: {
+      type: String,
+    },
+
+    status: {
+      type: String,
+      enum: ["active", "completed", "discontinued"],
+      default: "active",
+    },
+
+    takenToday: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
