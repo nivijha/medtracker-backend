@@ -10,6 +10,7 @@ import authRoutes from "./routes/authRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import appointmentRoutes from "./routes/appointmentRoutes.js";
 import medicationRoutes from "./routes/medicationRoutes.js";
+import activityRoutes from "./routes/activityRoutes.js";
 
 
 // Initialize app
@@ -45,6 +46,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/medications", medicationRoutes);
+app.use("/api/activity", activityRoutes);
 
 // Start server
 const PORT = process.env.PORT || 5000;

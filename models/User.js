@@ -27,6 +27,30 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "PATIENT",
     },
+
+    phone: {
+      type: String,
+      trim: true,
+    },
+
+    address: {
+      type: String,
+      trim: true,
+    },
+
+    dateOfBirth: {
+      type: String, 
+    },
+
+    bloodType: {
+      type: String,
+      enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+    },
+
+    emergencyContact: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );
