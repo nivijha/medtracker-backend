@@ -5,7 +5,7 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import connectDB from "./config/db.js";
-import testRoutes from "./routes/testRoutes.js";
+// import testRoutes from "./routes/testRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import appointmentRoutes from "./routes/appointmentRoutes.js";
@@ -41,7 +41,7 @@ app.get("/", (req, res) => {
 });
 
 // API Routes
-app.use("/api/test", testRoutes);
+// app.use("/api/test", testRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/appointments", appointmentRoutes);
