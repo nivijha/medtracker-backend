@@ -20,7 +20,7 @@ const sendToken = (res, user, message) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      phone: user.phone, // ✅ IMPORTANT
+      phone: user.phone, 
       profileImage: user.profileImage || "",
     },
     token,
@@ -32,7 +32,6 @@ export const registerUser = async (req, res) => {
     console.log("REGISTER BODY:", req.body);
     const { name, email, phone, password } = req.body;
 
-    // ✅ VALIDATION (THIS FIXES THE 500)
     if (!name || !email || !phone || !password) {
       return res.status(400).json({
         message: "Name, email, phone, and password are required",
@@ -53,9 +52,7 @@ export const registerUser = async (req, res) => {
 
     sendToken(res, user, "Registration successful");
   } catch (err) {
-    console.error("REGISTER ERROR:", err);
 
-    // ✅ Mongoose validation error → USER ERROR (400)
     if (err.name === "ValidationError") {
       const errors = Object.values(err.errors).map((e) => e.message);
 
@@ -65,14 +62,12 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    // ✅ Duplicate email error
     if (err.code === 11000) {
       return res.status(400).json({
         message: "Email already registered",
       });
     }
 
-    // ❌ Genuine server error
     return res.status(500).json({
       message: "Internal server error. Please try again later.",
     });
