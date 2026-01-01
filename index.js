@@ -3,6 +3,7 @@ dotenv.config();
 
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import mongoose from "mongoose";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -35,6 +36,10 @@ app.use(express.json());
 
 // Connect to MongoDB
 connectDB();
+
+
+app.use(cookieParser());
+
 
 // Base route to verify server
 app.get("/", (req, res) => {
