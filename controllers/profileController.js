@@ -16,6 +16,7 @@ export const getProfile = async (req, res) => {
   }
 };
 
+
 /* ---------------- UPDATE PROFILE ---------------- */
 export const updateProfile = async (req, res) => {
   try {
@@ -41,25 +42,43 @@ export const updateProfile = async (req, res) => {
 /* ---------------- HEALTH SUMMARY ---------------- */
 export const getHealthSummary = async (req, res) => {
   try {
+    const user = await User.findById(req.user.id);
+
     const [appointments, medications, reports] = await Promise.all([
       Appointment.countDocuments({ userId: req.user.id }),
-      Medication.countDocuments({
-        userId: req.user.id,
-        status: "active",
-      }),
+      Medication.countDocuments({ userId: req.user.id, status: "active" }),
       Report.countDocuments({ userId: req.user.id }),
     ]);
+
+    let score = 40;
+
+    if (user.phone || user.address || user.profileImage) score += 10;
+    if (reports > 0) score += 15;
+    if (appointments > 0) score += 15;
+    if (medications > 0) score += 10;
+
+    score = Math.min(100, score);
 
     res.json({
       appointments,
       activeMedications: medications,
       reports,
-      healthScore: Math.min(100, 60 + medications * 5), 
+      wellnessScore: score,
+      scoreLabel:
+        score >= 81
+          ? "Highly Engaged"
+          : score >= 61
+          ? "Actively Managing"
+          : score >= 41
+          ? "On Track"
+          : "Getting Started",
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch summary" });
   }
 };
+
+
 export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
