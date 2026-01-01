@@ -17,29 +17,26 @@ export const getProfile = async (req, res) => {
 };
 
 /* ---------------- UPDATE PROFILE ---------------- */
+// backend/controllers/profileController.js
 export const updateProfile = async (req, res) => {
   try {
-    const updates = {
-      name: req.body.name,
-      phone: req.body.phone,
-      address: req.body.address,
-      dateOfBirth: req.body.dateOfBirth,
-      bloodType: req.body.bloodType,
-      emergencyContact: req.body.emergencyContact,
-      profileImage: req.body.profileImage,
-    };
+    const { name, phone, address, profileImage } = req.body;
 
-    const user = await User.findByIdAndUpdate(
-      req.user.id,
-      updates,
-      { new: true, runValidators: true }
-    ).select("-password");
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
+    user.name = name ?? user.name;
+    user.phone = phone ?? user.phone;
+    user.address = address ?? user.address;
+    user.profileImage = profileImage ?? user.profileImage;
+
+    await user.save();
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: "Profile update failed" });
   }
 };
+
 
 /* ---------------- HEALTH SUMMARY ---------------- */
 export const getHealthSummary = async (req, res) => {
