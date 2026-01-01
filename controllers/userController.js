@@ -1,4 +1,4 @@
-import User from "../models/Test.js";
+import User from "../models/User.js";
 
 export const registerUser = async (req, res) => {
   try {
@@ -72,5 +72,53 @@ export const deleteUserAccount = async (req, res) => {
     res.json({ message: "Account deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: "Failed to delete account" });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Current password incorrect" });
+    }
+
+    user.password = newPassword; // hashed by pre-save hook
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to update password" });
+  }
+};
+
+export const exportUserData = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+
+    const exportData = {
+      profile: user,
+      exportedAt: new Date().toISOString(),
+    };
+
+    res.json(exportData);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to export data" });
+  }
+};
+    
+export const getUserSettings = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("preferences");
+    res.json(user.preferences);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to load settings" });
   }
 };
