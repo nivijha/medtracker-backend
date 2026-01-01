@@ -2,7 +2,8 @@ import express from "express";
 import {
   getProfile,
   updateProfile,
-  getHealthSummary
+  getHealthSummary,
+  changePassword,
 } from "../controllers/profileController.js";
 import protect from "../middleware/authMiddleware.js";
 
@@ -13,5 +14,6 @@ router.use(protect);
 router.get("/", getProfile);
 router.put("/", updateProfile);
 router.get("/summary", getHealthSummary);
+router.put("/change-password", changePassword);
 
 export default router;

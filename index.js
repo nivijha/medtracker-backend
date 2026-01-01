@@ -11,7 +11,6 @@ import appointmentRoutes from "./routes/appointmentRoutes.js";
 import medicationRoutes from "./routes/medicationRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
-import userRoutes from "./routes/userRoutes.js";
 
 
 
@@ -49,8 +48,6 @@ app.use("/api/appointments", appointmentRoutes);
 app.use("/api/medications", medicationRoutes);
 app.use("/api/activity", activityRoutes);
 app.use("/api/profile", profileRoutes);
-app.use("/api/user", userRoutes);
-
 
 // Start server
 const PORT = process.env.PORT || 5000;

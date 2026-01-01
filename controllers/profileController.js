@@ -54,9 +54,58 @@ export const getHealthSummary = async (req, res) => {
       appointments,
       activeMedications: medications,
       reports,
-      healthScore: Math.min(100, 60 + medications * 5), // simple logic
+      healthScore: Math.min(100, 60 + medications * 5), 
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch summary" });
+  }
+};
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        message: "Current password and new password are required",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        message: "New password must be at least 6 characters long",
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    const isSame = await user.matchPassword(newPassword);
+    if (isSame) {
+      return res.status(400).json({
+        message: "New password must be different from current password",
+      });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({
+      message: "Password updated successfully",
+    });
+  } catch (error) {
+    console.error("Change password error:", error);
+    res.status(500).json({
+      message: "Failed to update password",
+    });
   }
 };
