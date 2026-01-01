@@ -17,15 +17,15 @@ export const getProfile = async (req, res) => {
 };
 
 /* ---------------- UPDATE PROFILE ---------------- */
-// backend/controllers/profileController.js
 export const updateProfile = async (req, res) => {
   try {
-    const { name, phone, address, profileImage } = req.body;
+    const { name, email, phone, address, profileImage } = req.body;
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     user.name = name ?? user.name;
+    user.email = email ?? user.email;
     user.phone = phone ?? user.phone;
     user.address = address ?? user.address;
     user.profileImage = profileImage ?? user.profileImage;
