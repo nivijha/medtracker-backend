@@ -11,9 +11,9 @@ const router = express.Router();
 
 router.use(protect);
 
-router.get("/", getProfile);
-router.put("/", updateProfile);
-router.get("/summary", getHealthSummary);
-router.put("/change-password", changePassword);
+router.get("/", protect, getProfile);
+router.put("/", protect, updateProfile);
+router.get("/summary", protect, getHealthSummary);
+router.put("/change-password", protect, changePassword);
 
 export default router;
