@@ -5,7 +5,6 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import connectDB from "./config/db.js";
-// import testRoutes from "./routes/testRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import appointmentRoutes from "./routes/appointmentRoutes.js";
