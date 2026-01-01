@@ -42,6 +42,42 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "PATIENT",
     },
+    
+    preferences: {
+      notifications: {
+        email: { type: Boolean, default: true },
+        push: { type: Boolean, default: true },
+        sms: { type: Boolean, default: false },
+        appointments: { type: Boolean, default: true },
+        reports: { type: Boolean, default: true },
+        medications: { type: Boolean, default: true },
+        marketing: { type: Boolean, default: false },
+      },
+
+      privacy: {
+        profileVisibility: {
+          type: String,
+          enum: ["public", "private", "friends"],
+          default: "private",
+        },
+        shareData: { type: Boolean, default: false },
+        twoFactor: { type: Boolean, default: false },
+      },
+
+      appearance: {
+        theme: {
+          type: String,
+          enum: ["light", "dark", "auto"],
+          default: "light",
+        },
+        language: { type: String, default: "en" },
+        fontSize: {
+          type: String,
+          enum: ["small", "medium", "large"],
+          default: "medium",
+        },
+      },
+    },
   },
   { timestamps: true }
 );
