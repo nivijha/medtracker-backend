@@ -16,15 +16,14 @@ export const getProfile = async (req, res) => {
   }
 };
 
+
 /* ---------------- UPDATE PROFILE ---------------- */
 export const updateProfile = async (req, res) => {
   try {
     const { name, email, phone, address, profileImage } = req.body;
 
     const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     user.name = name ?? user.name;
     user.email = email ?? user.email;
@@ -33,25 +32,12 @@ export const updateProfile = async (req, res) => {
     user.profileImage = profileImage ?? user.profileImage;
 
     await user.save();
-
-    const safeUser = {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      address: user.address,
-      profileImage: user.profileImage,
-    };
-
-    res.json({
-      message: "Profile updated successfully",
-      user: safeUser,
-    });
+    res.json(user);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: "Profile update failed" });
   }
 };
+
 
 /* ---------------- HEALTH SUMMARY ---------------- */
 export const getHealthSummary = async (req, res) => {
@@ -91,6 +77,7 @@ export const getHealthSummary = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch summary" });
   }
 };
+
 
 export const changePassword = async (req, res) => {
   try {
