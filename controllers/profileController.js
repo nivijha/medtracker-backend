@@ -26,6 +26,7 @@ export const updateProfile = async (req, res) => {
       dateOfBirth: req.body.dateOfBirth,
       bloodType: req.body.bloodType,
       emergencyContact: req.body.emergencyContact,
+      profileImage: req.body.profileImage,
     };
 
     const user = await User.findByIdAndUpdate(
