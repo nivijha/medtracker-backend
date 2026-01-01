@@ -15,7 +15,6 @@ import profileRoutes from "./routes/profileRoutes.js";
 
 
 
-
 // Initialize app
 const app = express();
 

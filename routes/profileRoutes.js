@@ -2,7 +2,7 @@ import express from "express";
 import {
   getProfile,
   updateProfile,
-  getProfileSummary
+  getHealthSummary
 } from "../controllers/profileController.js";
 import protect from "../middleware/authMiddleware.js";
 
@@ -12,6 +12,6 @@ router.use(protect);
 
 router.get("/", getProfile);
 router.put("/", updateProfile);
-router.get("/summary", getProfileSummary);
+router.get("/summary", getHealthSummary);
 
 export default router;
