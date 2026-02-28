@@ -1,59 +1,78 @@
 import Appointment from "../models/Appointment.js";
 
-/* ---------------- GET UPCOMING ---------------- */
-export const getUpcomingAppointments = async (req, res) => {
+/**
+ * @desc    Get upcoming appointments
+ * @route   GET /api/appointments/upcoming
+ * @access  Private
+ */
+export const getUpcomingAppointments = async (req, res, next) => {
   try {
     const now = new Date();
 
     const appointments = await Appointment.find({
-      userId: req.user.id,
+      user: req.user.id,
       appointmentDateTime: { $gte: now },
       status: { $ne: "cancelled" },
-    }).sort({ appointmentDateTime: 1 });
+    })
+      .populate("user", "name email")
+      .sort({ appointmentDateTime: 1 });
 
     res.json({ appointments });
   } catch (error) {
-    console.error("Upcoming appointments error:", error);
-    res.status(500).json({ message: "Server error" });
+    next(error);
   }
 };
 
-/* ---------------- GET PAST ---------------- */
-export const getPastAppointments = async (req, res) => {
+/**
+ * @desc    Get past appointments
+ * @route   GET /api/appointments/past
+ * @access  Private
+ */
+export const getPastAppointments = async (req, res, next) => {
   try {
     const now = new Date();
 
     const appointments = await Appointment.find({
-      userId: req.user.id,
+      user: req.user.id,
       $or: [
         { appointmentDateTime: { $lt: now } },
         { status: "cancelled" },
       ],
-    }).sort({ appointmentDateTime: -1 });
+    })
+      .populate("user", "name email")
+      .sort({ appointmentDateTime: -1 });
 
     res.json({ appointments });
   } catch (error) {
-    console.error("Past appointments error:", error);
-    res.status(500).json({ message: "Server error" });
+    next(error);
   }
 };
 
-/* ---------------- GET ALL ---------------- */
-export const getAppointments = async (req, res) => {
+/**
+ * @desc    Get all user appointments
+ * @route   GET /api/appointments
+ * @access  Private
+ */
+export const getAppointments = async (req, res, next) => {
   try {
     const appointments = await Appointment.find({
-      userId: req.user.id,
-    }).sort({ appointmentDateTime: 1 });
+      user: req.user.id,
+    })
+      .populate("user", "name email")
+      .sort({ appointmentDateTime: 1 });
 
     res.json({ appointments });
   } catch (error) {
-    console.error("Get appointments error:", error);
-    res.status(500).json({ message: "Server error" });
+    next(error);
   }
 };
 
-/* ---------------- CREATE ---------------- */
-export const createAppointment = async (req, res) => {
+/**
+ * @desc    Create a new appointment
+ * @route   POST /api/appointments
+ * @access  Private
+ */
+export const createAppointment = async (req, res, next) => {
   try {
     const { doctorName, specialty, hospital, date, time, notes } = req.body;
 
@@ -63,11 +82,11 @@ export const createAppointment = async (req, res) => {
         .json({ message: "Doctor, date and time are required" });
     }
 
-    // IST → UTC conversion
+    // IST → UTC conversion (assuming client sends local date/time)
     const appointmentDateTime = new Date(`${date}T${time}:00+05:30`);
 
     const appointment = await Appointment.create({
-      userId: req.user.id,
+      user: req.user.id,
       doctorName,
       specialty,
       hospital,
@@ -78,17 +97,20 @@ export const createAppointment = async (req, res) => {
 
     res.status(201).json({ appointment });
   } catch (error) {
-    console.error("Create appointment error:", error);
-    res.status(500).json({ message: "Server error" });
+    next(error);
   }
 };
 
-/* ---------------- CANCEL ---------------- */
-export const cancelAppointment = async (req, res) => {
+/**
+ * @desc    Cancel an appointment
+ * @route   PUT /api/appointments/:id/cancel
+ * @access  Private
+ */
+export const cancelAppointment = async (req, res, next) => {
   try {
     const appointment = await Appointment.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      user: req.user.id,
     });
 
     if (!appointment) {
@@ -100,17 +122,20 @@ export const cancelAppointment = async (req, res) => {
 
     res.json({ appointment });
   } catch (error) {
-    console.error("Cancel appointment error:", error);
-    res.status(500).json({ message: "Server error" });
+    next(error);
   }
 };
 
-/* ---------------- DELETE ---------------- */
-export const deleteAppointment = async (req, res) => {
+/**
+ * @desc    Delete an appointment
+ * @route   DELETE /api/appointments/:id
+ * @access  Private
+ */
+export const deleteAppointment = async (req, res, next) => {
   try {
     const appointment = await Appointment.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      user: req.user.id,
     });
 
     if (!appointment) {
@@ -120,7 +145,6 @@ export const deleteAppointment = async (req, res) => {
     await appointment.deleteOne();
     res.json({ message: "Appointment deleted successfully" });
   } catch (error) {
-    console.error("Delete appointment error:", error);
-    res.status(500).json({ message: "Server error" });
+    next(error);
   }
 };

@@ -1,97 +1,145 @@
 import Medication from "../models/Medication.js";
 
-/* CREATE */
-export const createMedication = async (req, res) => {
+/**
+ * @desc    Create a new medication
+ * @route   POST /api/medications
+ * @access  Private
+ */
+export const createMedication = async (req, res, next) => {
   try {
     const medication = await Medication.create({
       ...req.body,
-      userId: req.user.id,
+      user: req.user.id,
     });
 
     res.status(201).json({ medication });
-  } catch (err) {
-    res.status(400).json({ message: "Failed to create medication" });
+  } catch (error) {
+    next(error);
   }
 };
 
-/* GET ALL */
-export const getMedications = async (req, res) => {
-  const meds = await Medication.find({ userId: req.user.id }).sort({
-    createdAt: -1,
-  });
+/**
+ * @desc    Get all user medications
+ * @route   GET /api/medications
+ * @access  Private
+ */
+export const getMedications = async (req, res, next) => {
+  try {
+    const meds = await Medication.find({ user: req.user.id }).sort({
+      createdAt: -1,
+    });
 
-  // derive refillSoon (within 7 days)
-  const now = new Date();
-  const medications = meds.map((med) => ({
-    ...med.toObject(),
-    refillSoon:
-      med.nextRefill &&
-      med.nextRefill <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
-  }));
+    // derive refillSoon (within 7 days)
+    const now = new Date();
+    const medications = meds.map((med) => ({
+      ...med.toObject(),
+      refillSoon:
+        med.nextRefill &&
+        med.nextRefill <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+    }));
 
-  res.json({ medications });
-};
-
-/* DELETE */
-export const deleteMedication = async (req, res) => {
-  await Medication.findOneAndDelete({
-    _id: req.params.id,
-    userId: req.user.id,
-  });
-
-  res.json({ message: "Medication deleted" });
-};
-
-/* MARK AS TAKEN */
-export const markMedicationAsTaken = async (req, res) => {
-  const medication = await Medication.findOne({
-    _id: req.params.id,
-    userId: req.user.id,
-  });
-
-  if (!medication) {
-    return res.status(404).json({ message: "Medication not found" });
+    res.json({ medications });
+  } catch (error) {
+    next(error);
   }
-
-  medication.takenToday = true;
-  await medication.save();
-
-  res.json({ medication });
 };
 
-/* TODAY SCHEDULE */
-export const getMedicationSchedule = async (req, res) => {
-  const meds = await Medication.find({
-    userId: req.user.id,
-    status: "active",
-  });
+/**
+ * @desc    Delete a medication
+ * @route   DELETE /api/medications/:id
+ * @access  Private
+ */
+export const deleteMedication = async (req, res, next) => {
+  try {
+    const medication = await Medication.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user.id,
+    });
 
-  const schedule = meds.map((med) => ({
-    medicationId: med._id,
-    time: med.time,
-    medications: [`${med.name} (${med.dosage})`],
-    taken: med.takenToday,
-  }));
+    if (!medication) {
+      return res.status(404).json({ message: "Medication not found" });
+    }
 
-  res.json(schedule);
-};
-
-/* REFILL */
-export const processRefill = async (req, res) => {
-  const medication = await Medication.findOne({
-    _id: req.params.id,
-    userId: req.user.id,
-  });
-
-  if (!medication) {
-    return res.status(404).json({ message: "Medication not found" });
+    res.json({ message: "Medication deleted" });
+  } catch (error) {
+    next(error);
   }
+};
 
-  medication.nextRefill = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000
-  );
-  medication.status = "active";
+/**
+ * @desc    Mark medication as taken for today
+ * @route   POST /api/medications/:id/take
+ * @access  Private
+ */
+export const markMedicationAsTaken = async (req, res, next) => {
+  try {
+    const medication = await Medication.findOne({
+      _id: req.params.id,
+      user: req.user.id,
+    });
 
-  await medication.save();
-  res.json({ medication });
+    if (!medication) {
+      return res.status(404).json({ message: "Medication not found" });
+    }
+
+    medication.takenToday = true;
+    await medication.save();
+
+    res.json({ medication });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get today's medication schedule
+ * @route   GET /api/medications/schedule
+ * @access  Private
+ */
+export const getMedicationSchedule = async (req, res, next) => {
+  try {
+    const meds = await Medication.find({
+      user: req.user.id,
+      status: "active",
+    });
+
+    const schedule = meds.map((med) => ({
+      medicationId: med._id,
+      time: med.time,
+      medications: [`${med.name} (${med.dosage})`],
+      taken: med.takenToday,
+    }));
+
+    res.json(schedule);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Process medication refill
+ * @route   POST /api/medications/:id/refill
+ * @access  Private
+ */
+export const processRefill = async (req, res, next) => {
+  try {
+    const medication = await Medication.findOne({
+      _id: req.params.id,
+      user: req.user.id,
+    });
+
+    if (!medication) {
+      return res.status(404).json({ message: "Medication not found" });
+    }
+
+    medication.nextRefill = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000
+    );
+    medication.status = "active";
+
+    await medication.save();
+    res.json({ medication });
+  } catch (error) {
+    next(error);
+  }
 };

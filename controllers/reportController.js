@@ -1,7 +1,12 @@
 import Report from "../models/Report.js";
 import cloudinary from "../config/cloudinary.js";
 
-const uploadReport = async (req, res) => {
+/**
+ * @desc    Upload a medical report
+ * @route   POST /api/reports/upload
+ * @access  Private
+ */
+const uploadReport = async (req, res, next) => {
   try {
     const { type, description, doctorName } = req.body;
 
@@ -12,7 +17,7 @@ const uploadReport = async (req, res) => {
     }
 
     const report = await Report.create({
-      userId: req.user.id,
+      user: req.user.id,
       type,
       fileUrl: req.file.path,
       cloudinaryId: req.file.filename,
@@ -25,26 +30,35 @@ const uploadReport = async (req, res) => {
       report,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
-
-  console.log("REQ FILE:", req.file);
-  console.log("REQ BODY:", req.body);
 };
 
-const getMyReports = async (req, res) => {
+/**
+ * @desc    Get logged-in user's reports
+ * @route   GET /api/reports/my
+ * @access  Private
+ */
+const getMyReports = async (req, res, next) => {
   try {
-    const reports = await Report.find({ userId: req.user.id }).sort({
-      createdAt: -1,
-    });
+    const reports = await Report.find({ user: req.user.id })
+      .populate("user", "name email")
+      .sort({
+        createdAt: -1,
+      });
 
     res.json(reports);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-const deleteReport = async (req, res) => {
+/**
+ * @desc    Delete a report
+ * @route   DELETE /api/reports/:id
+ * @access  Private
+ */
+const deleteReport = async (req, res, next) => {
   try {
     const report = await Report.findById(req.params.id);
 
@@ -52,19 +66,21 @@ const deleteReport = async (req, res) => {
       return res.status(404).json({ message: "Report not found" });
     }
 
-    if (report.userId.toString() !== req.user.id) {
+    if (report.user.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
     // DELETE FROM CLOUDINARY
-    await cloudinary.uploader.destroy(report.cloudinaryId);
+    if (report.cloudinaryId) {
+      await cloudinary.uploader.destroy(report.cloudinaryId);
+    }
 
     // DELETE FROM DB
     await report.deleteOne();
 
     res.json({ message: "Report deleted successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 

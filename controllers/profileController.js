@@ -3,8 +3,12 @@ import Appointment from "../models/Appointment.js";
 import Medication from "../models/Medication.js";
 import Report from "../models/Report.js";
 
-/* ---------------- GET PROFILE ---------------- */
-export const getProfile = async (req, res) => {
+/**
+ * @desc    Get user profile
+ * @route   GET /api/profile
+ * @access  Private
+ */
+export const getProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
 
@@ -12,13 +16,16 @@ export const getProfile = async (req, res) => {
 
     res.json(user);
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch profile" });
+    next(err);
   }
 };
 
-
-/* ---------------- UPDATE PROFILE ---------------- */
-export const updateProfile = async (req, res) => {
+/**
+ * @desc    Update user profile
+ * @route   PUT /api/profile
+ * @access  Private
+ */
+export const updateProfile = async (req, res, next) => {
   try {
     const { name, email, phone, address, profileImage } = req.body;
 
@@ -34,20 +41,23 @@ export const updateProfile = async (req, res) => {
     await user.save();
     res.json(user);
   } catch (err) {
-    res.status(500).json({ message: "Profile update failed" });
+    next(err);
   }
 };
 
-
-/* ---------------- HEALTH SUMMARY ---------------- */
-export const getHealthSummary = async (req, res) => {
+/**
+ * @desc    Get health summary statistics
+ * @route   GET /api/profile/summary
+ * @access  Private
+ */
+export const getHealthSummary = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
 
     const [appointments, medications, reports] = await Promise.all([
-      Appointment.countDocuments({ userId: req.user.id }),
-      Medication.countDocuments({ userId: req.user.id, status: "active" }),
-      Report.countDocuments({ userId: req.user.id }),
+      Appointment.countDocuments({ user: req.user.id }),
+      Medication.countDocuments({ user: req.user.id, status: "active" }),
+      Report.countDocuments({ user: req.user.id }),
     ]);
 
     let score = 40;
@@ -74,12 +84,16 @@ export const getHealthSummary = async (req, res) => {
           : "Getting Started",
     });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch summary" });
+    next(err);
   }
 };
 
-
-export const changePassword = async (req, res) => {
+/**
+ * @desc    Change user password
+ * @route   PUT /api/profile/change-password
+ * @access  Private
+ */
+export const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
@@ -95,7 +109,7 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.id);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -122,9 +136,6 @@ export const changePassword = async (req, res) => {
       message: "Password updated successfully",
     });
   } catch (error) {
-    console.error("Change password error:", error);
-    res.status(500).json({
-      message: "Failed to update password",
-    });
+    next(error);
   }
 };

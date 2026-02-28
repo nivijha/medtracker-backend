@@ -1,12 +1,14 @@
-import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+import { registerUserService, loginUserService } from "../services/authService.js";
+import { validationResult } from "express-validator";
 
-const generateToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-const sendToken = (res, user, message) => {
-  const token = generateToken(user._id);
-
+/**
+ * @desc    Send token in cookie and response
+ * @param   {object} res - Response object
+ * @param   {object} user - User object
+ * @param   {string} token - JWT Token
+ * @param   {string} message - Success message
+ */
+const sendToken = (res, user, token, message) => {
   res.cookie("token", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -20,91 +22,84 @@ const sendToken = (res, user, message) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      phone: user.phone, 
+      phone: user.phone,
       profileImage: user.profileImage || "",
     },
-    token,
+    token, // Keeping for backward compatibility if needed, but cookie is primary
   });
 };
 
-export const registerUser = async (req, res) => {
+/**
+ * @desc    Register a new user
+ * @route   POST /api/auth/register
+ * @access  Public
+ */
+export const registerUser = async (req, res, next) => {
   try {
-    console.log("REGISTER BODY:", req.body);
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     const { name, email, phone, password } = req.body;
+    const { user, token } = await registerUserService({ name, email, phone, password });
 
-    if (!name || !email || !phone || !password) {
-      return res.status(400).json({
-        message: "Name, email, phone, and password are required",
-      });
-    }
-
-    const existing = await User.findOne({ email });
-    if (existing) {
-      return res.status(400).json({ message: "User already exists" });
-    }
-
-    const user = await User.create({
-      name,
-      email,
-      phone,
-      password,
-    });
-
-    sendToken(res, user, "Registration successful");
+    sendToken(res, user, token, "Registration successful");
   } catch (err) {
-
-    if (err.name === "ValidationError") {
-      const errors = Object.values(err.errors).map((e) => e.message);
-
-      return res.status(400).json({
-        message: "Invalid input",
-        errors,
-      });
-    }
-
-    if (err.code === 11000) {
-      return res.status(400).json({
-        message: "Email already registered",
-      });
-    }
-
-    return res.status(500).json({
-      message: "Internal server error. Please try again later.",
-    });
+    next(err);
   }
 };
 
-export const loginUser = async (req, res) => {
+/**
+ * @desc    Login user
+ * @route   POST /api/auth/login
+ * @access  Public
+ */
+export const loginUser = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     const { email, password } = req.body;
+    const { user, token } = await loginUserService({ email, password });
 
-    if (!email || !password) {
-      return res.status(400).json({
-        message: "Email and password are required",
-      });
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
+    sendToken(res, user, token, "Login successful");
+  } catch (err) {
+    if (err.message === "Invalid credentials") {
       return res.status(401).json({ message: "Invalid credentials" });
     }
-
-    sendToken(res, user, "Login successful");
-  } catch (err) {
-    console.error("LOGIN ERROR:", err);
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
-export const getUserProfile = async (req, res) => {
+/**
+ * @desc    Get current user profile
+ * @route   GET /api/auth/me
+ * @access  Private
+ */
+export const getUserProfile = async (req, res, next) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Not authorized" });
+    }
     res.json(req.user);
   } catch (err) {
-    res.status(500).json({ message: "Error fetching user profile" });
+    next(err);
   }
 };
+
+/**
+ * @desc    Logout user / clear cookie
+ * @route   POST /api/auth/logout
+ * @access  Private
+ */
+export const logoutUser = (req, res) => {
+  res.cookie("token", "", {
+    httpOnly: true,
+    expires: new Date(0),
+  });
+  res.status(200).json({ message: "Logged out successfully" });
+};
+

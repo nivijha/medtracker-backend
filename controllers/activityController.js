@@ -2,24 +2,29 @@ import Appointment from "../models/Appointment.js";
 import Medication from "../models/Medication.js";
 import Report from "../models/Report.js";
 
-export const getRecentActivity = async (req, res) => {
+/**
+ * @desc    Get recent activities (appointments, medications, reports)
+ * @route   GET /api/activity
+ * @access  Private
+ */
+export const getRecentActivity = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const user = req.user.id;
 
-    const appointments = await Appointment.find({ userId })
-      .sort({ updatedAt: -1 })
-      .limit(5)
-      .select("doctorName appointmentDateTime status updatedAt");
-
-    const medications = await Medication.find({ userId })
-      .sort({ updatedAt: -1 })
-      .limit(5)
-      .select("name status takenToday updatedAt");
-
-    const reports = await Report.find({ userId })
-      .sort({ updatedAt: -1 })
-      .limit(5)
-      .select("title createdAt");
+    const [appointments, medications, reports] = await Promise.all([
+      Appointment.find({ user })
+        .sort({ updatedAt: -1 })
+        .limit(5)
+        .select("doctorName appointmentDateTime status updatedAt"),
+      Medication.find({ user })
+        .sort({ updatedAt: -1 })
+        .limit(5)
+        .select("name status takenToday updatedAt"),
+      Report.find({ user })
+        .sort({ updatedAt: -1 })
+        .limit(5)
+        .select("type createdAt"),
+    ]);
 
     const activity = [];
 
@@ -44,7 +49,7 @@ export const getRecentActivity = async (req, res) => {
     reports.forEach((r) =>
       activity.push({
         type: "report",
-        title: `Report uploaded`,
+        title: `${r.type.charAt(0).toUpperCase() + r.type.slice(1)} report uploaded`,
         time: r.createdAt,
         status: "completed",
       })
@@ -54,6 +59,6 @@ export const getRecentActivity = async (req, res) => {
 
     res.json(activity.slice(0, 6));
   } catch (err) {
-    res.status(500).json({ message: "Failed to load recent activity" });
+    next(err);
   }
 };

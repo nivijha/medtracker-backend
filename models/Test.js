@@ -1,45 +1,44 @@
 import mongoose from "mongoose";
 
-const reportSchema = new mongoose.Schema(
+const testSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
-    type: {
+    testName: {
       type: String,
-      enum: ["lab", "imaging", "pathology", "cardiology", "other"],
       required: true,
+      trim: true,
     },
-
-    fileUrl: {
+    result: {
       type: String,
       required: true,
     },
-
-    cloudinaryId: {
+    referenceRange: {
       type: String,
       required: true,
     },
-
-    description: {
+    unit: {
       type: String,
       trim: true,
     },
-
-    doctorName: {
-      type: String,
-      trim: true,
-    },
-
-    reportDate: {
+    testDate: {
       type: Date,
       default: Date.now,
+    },
+    status: {
+      type: String,
+      enum: ["Pending", "Completed", "Flagged"],
+      default: "Completed",
+    },
+    notes: {
+      type: String,
+      trim: true,
     },
   },
   { timestamps: true }
 );
 
-export default mongoose.model("Report", reportSchema);
+export default mongoose.model("Test", testSchema);
