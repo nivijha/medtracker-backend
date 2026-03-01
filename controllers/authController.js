@@ -9,10 +9,12 @@ import { validationResult } from "express-validator";
  * @param   {string} message - Success message
  */
 const sendToken = (res, user, token, message) => {
+  const isProduction = process.env.NODE_ENV === "production";
+  
   res.cookie("token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
@@ -96,8 +98,11 @@ export const getUserProfile = async (req, res, next) => {
  * @access  Private
  */
 export const logoutUser = (req, res) => {
+  const isProduction = process.env.NODE_ENV === "production";
   res.cookie("token", "", {
     httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     expires: new Date(0),
   });
   res.status(200).json({ message: "Logged out successfully" });
