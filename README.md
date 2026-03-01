@@ -2,7 +2,7 @@
 
 A robust Node.js backend API for medical tracking and management system. This application provides secure authentication, user management, and comprehensive medical reporting features.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Features](#features)
 - [Tech Stack](#tech-stack)
@@ -16,60 +16,89 @@ A robust Node.js backend API for medical tracking and management system. This ap
 - [Models](#models)
 - [Contributing](#contributing)
 
-## ✨ Features
+## Features
 
 - **User Authentication**: Secure user registration and login with JWT
 - **User Management**: Complete CRUD operations for user profiles
 - **Medical Reports**: Create, read, update, and delete medical reports
 - **Test Management**: Track and manage medical test records
+- **Appointment Scheduling**: Manage doctor appointments
+- **Medication Tracking**: Track prescriptions and schedules
+- **Activity Monitoring**: View recent account activity
 - **Middleware Protection**: Route protection with authentication middleware
-- **Database Integration**: Structured data models for users, reports, and tests
+- **Database Integration**: Structured data models for users, reports, tests, appointments, and medications
 
-## 🚀 Tech Stack
+## Tech Stack
 
 - **Runtime**: Node.js
 - **Framework**: Express.js
-- **Database**: MongoDB (assumed based on typical Node.js structure)
+- **Database**: MongoDB
 - **Authentication**: JWT (JSON Web Tokens)
 - **Language**: JavaScript (ES6+)
+- **Cloud Storage**: Cloudinary
+- **AI Integration**: Hugging Face (Llama), Google Gemini
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 medtracker-backend/
 ├── config/
-│   └── db.js                 # Database configuration
+│   ├── cloudinary.js         # Cloudinary configuration
+│   ├── db.js                 # Database configuration
+│   ├── gemini.js             # Google Gemini AI config
+│   ├── llama_ocr.js          # Llama OCR config
+│   └── llama_summary.js      # Llama Summary config
 ├── controllers/
-│   ├── authController.js     # Authentication logic
-│   └── userController.js     # User management logic
+│   ├── activityController.js    # Activity logic
+│   ├── appointmentController.js # Appointment logic
+│   ├── authController.js        # Authentication logic
+│   ├── medicationController.js  # Medication logic
+│   ├── miscController.js        # Miscellaneous logic
+│   ├── profileController.js     # User profile logic
+│   ├── reportController.js      # Report logic
+│   └── testController.js        # Test logic
 ├── middleware/
-│   └── authMiddleware.js     # JWT authentication middleware
+│   ├── authMiddleware.js     # JWT authentication middleware
+│   ├── errorMiddleware.js    # Global error handler
+│   └── uploadMiddleware.js   # File upload middleware
 ├── models/
+│   ├── Appointment.js        # Appointment schema
+│   ├── Healthmetric.js       # Health metrics schema
+│   ├── Medication.js         # Medication schema
 │   ├── Report.js             # Medical report schema
 │   ├── Test.js               # Medical test schema
 │   └── User.js               # User schema
 ├── routes/
+│   ├── activityRoutes.js     # Activity routes
+│   ├── appointmentRoutes.js  # Appointment routes
 │   ├── authRoutes.js         # Authentication routes
-│   ├── reportRoutes.js       # Report management routes
-│   └── testRoutes.js         # Test management routes
-├── node_modules/             # Dependencies
+│   ├── medicationRoutes.js   # Medication routes
+│   ├── profileRoutes.js      # Profile routes
+│   ├── reportRoutes.js       # Report routes
+│   └── testRoutes.js         # Test routes
+├── services/
+│   └── authService.js        # Auth business logic
+├── uploads/                  # Local upload directory
+├── utils/
+│   └── logger.js             # Logger utility
 ├── .env                      # Environment variables
-├── .gitignore               # Git ignore file
-├── index.js                 # Application entry point
-├── middleware.js            # Global middleware configuration
-├── package.json             # Project dependencies
-└── package-lock.json        # Locked dependencies
+├── .env.example              # Example environment variables
+├── .gitignore                # Git ignore file
+├── index.js                  # Application entry point
+├── middleware.js             # Global middleware configuration
+├── package.json              # Project dependencies
+└── package-lock.json         # Locked dependencies
 ```
 
-## 📦 Prerequisites
+## Prerequisites
 
 Before you begin, ensure you have the following installed:
 
 - **Node.js** (v14 or higher)
-- **npm** 
+- **npm**
 - **MongoDB** (local or cloud instance)
 
-## 🔧 Installation
+## Installation
 
 1. **Clone the repository**
 
@@ -78,13 +107,13 @@ git clone https://github.com/nivijha/medtracker-backend.git
 cd medtracker-backend
 ```
 
-2. **Install dependencies**
+1. **Install dependencies**
 
 ```bash
 npm install
 ```
 
-## 🔐 Environment Variables
+## Environment Variables
 
 Create a `.env` file in the root directory with the following variables:
 
@@ -94,19 +123,28 @@ PORT=5000
 NODE_ENV=development
 
 # Database
-MONGODB_URI=mongodb://localhost:27017/medtracker
+MONGO_URI=mongodb://localhost:27017/medtracker
 # Or for MongoDB Atlas:
-# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/medtracker
+# MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/medtracker
 
 # JWT Secret
 JWT_SECRET=your_super_secret_jwt_key_here
 JWT_EXPIRE=7d
 
+# Cloudinary (for file uploads)
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+
+# AI Integration (Optional)
+HF_TOKEN=your_hugging_face_token
+GEMINI_API_KEY=your_gemini_api_key
+
 # Optional: CORS Configuration
 CLIENT_URL=http://localhost:3000
 ```
 
-## 🏃 Running the Application
+## Running the Application
 
 ### Development Mode
 
@@ -122,7 +160,7 @@ npm start
 
 The server will start on `http://localhost:5000` (or your configured PORT).
 
-## 🛣️ API Endpoints
+## API Endpoints
 
 ### Authentication Routes (`/api/auth`)
 
@@ -131,38 +169,62 @@ The server will start on `http://localhost:5000` (or your configured PORT).
 | POST | `/api/auth/register` | Register new user | No |
 | POST | `/api/auth/login` | User login | No |
 | GET | `/api/auth/me` | Get current user | Yes |
-| POST | `/api/auth/logout` | User logout | Yes |
+| POST | `/api/auth/logout` | User logout | Yes (cookie clearing) |
 
-### User Routes (`/api/users`)
+### Profile Routes (`/api/profile`)
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| GET | `/api/users` | Get all users | Yes |
-| GET | `/api/users/:id` | Get user by ID | Yes |
-| PUT | `/api/users/:id` | Update user | Yes |
-| DELETE | `/api/users/:id` | Delete user | Yes |
+| GET | `/api/profile` | Get user profile | Yes |
+| PUT | `/api/profile` | Update user profile | Yes |
+| GET | `/api/profile/summary` | Get health summary stats | Yes |
+| PUT | `/api/profile/change-password` | Change password | Yes |
+
+### Appointment Routes (`/api/appointments`)
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/appointments` | Get all appointments | Yes |
+| GET | `/api/appointments/upcoming` | Get upcoming appointments | Yes |
+| GET | `/api/appointments/past` | Get past appointments | Yes |
+| POST | `/api/appointments` | Create appointment | Yes |
+| PUT | `/api/appointments/:id/cancel` | Cancel appointment | Yes |
+| DELETE | `/api/appointments/:id` | Delete appointment | Yes |
+
+### Medication Routes (`/api/medications`)
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/medications` | Get all medications | Yes |
+| GET | `/api/medications/schedule` | Get medication schedule | Yes |
+| POST | `/api/medications` | Add new medication | Yes |
+| POST | `/api/medications/:id/take` | Mark medication as taken | Yes |
+| POST | `/api/medications/:id/refill` | Process refill | Yes |
+| DELETE | `/api/medications/:id` | Delete medication | Yes |
 
 ### Report Routes (`/api/reports`)
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| GET | `/api/reports` | Get all reports | Yes |
-| GET | `/api/reports/:id` | Get report by ID | Yes |
-| POST | `/api/reports` | Create new report | Yes |
-| PUT | `/api/reports/:id` | Update report | Yes |
+| GET | `/api/reports/my` | Get logged-in user's reports | Yes |
+| POST | `/api/reports/upload` | Upload medical report | Yes |
 | DELETE | `/api/reports/:id` | Delete report | Yes |
 
 ### Test Routes (`/api/tests`)
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| GET | `/api/tests` | Get all tests | Yes |
-| GET | `/api/tests/:id` | Get test by ID | Yes |
-| POST | `/api/tests` | Create new test | Yes |
-| PUT | `/api/tests/:id` | Update test | Yes |
-| DELETE | `/api/tests/:id` | Delete test | Yes |
+| GET | `/api/tests/my` | Get logged-in user's tests | Yes |
+| POST | `/api/tests` | Create new test result | Yes |
+| DELETE | `/api/tests/:id` | Delete test result | Yes |
 
-## 🔒 Authentication
+### Activity Routes (`/api/activity`)
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/activity` | Get recent activity | Yes |
+
+## Authentication
 
 This API uses JWT (JSON Web Tokens) for authentication. Include the token in the Authorization header for protected routes:
 
@@ -170,30 +232,29 @@ This API uses JWT (JSON Web Tokens) for authentication. Include the token in the
 Authorization: Bearer <your_jwt_token>
 ```
 
-## 📊 Models
+## Models
 
 ### User Model
-- Email
-- Password (hashed)
-- Name
-- Role
-- Created/Updated timestamps
+
+- Email, Password (hashed), Name, Role, Phone, Address
+
+### Appointment Model
+
+- User, Doctor Name, Specialty, Hospital, Date, Status
+
+### Medication Model
+
+- User, Name, Dosage, Frequency, Start Date, End Date
 
 ### Report Model
-- User reference
-- Report details
-- Test results
-- Date
-- Status
+
+- User, Type, File URL, Description, Report Date
 
 ### Test Model
-- Test name
-- Test type
-- Results
-- Reference ranges
-- Date performed
 
-## 🤝 Contributing
+- User, Test Name, Result, Reference Range, Unit, Date
+
+## Contributing
 
 Contributions are welcome! Please follow these steps:
 
@@ -203,10 +264,6 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 🔗 Links
+## Links
 
 - [Frontend Repository](https://github.com/nivijha/medtracker-frontend)
-
----
-
-**Note**: Make sure to never commit your `.env` file to version control. It's already included in `.gitignore` for security purposes.

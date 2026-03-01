@@ -41,13 +41,27 @@ const uploadReport = async (req, res, next) => {
  */
 const getMyReports = async (req, res, next) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const total = await Report.countDocuments({ user: req.user.id });
     const reports = await Report.find({ user: req.user.id })
       .populate("user", "name email")
       .sort({
         createdAt: -1,
-      });
+      })
+      .skip(skip)
+      .limit(limit);
 
-    res.json(reports);
+    res.json({
+      reports,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     next(error);
   }

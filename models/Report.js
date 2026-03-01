@@ -36,7 +36,7 @@ const reportSchema = new mongoose.Schema(
 
     reportDate: {
       type: Date,
-      default: Date.now,
+      required: true,
     },
   },
   { timestamps: true }

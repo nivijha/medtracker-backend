@@ -32,7 +32,7 @@ router.post(
   loginUser
 );
 
-router.post("/logout", logoutUser);
+router.post("/logout", protect, logoutUser);
 router.get("/me", protect, getUserProfile);
 
 export default router;

@@ -26,7 +26,7 @@ const testSchema = new mongoose.Schema(
     },
     testDate: {
       type: Date,
-      default: Date.now,
+      required: true,
     },
     status: {
       type: String,
