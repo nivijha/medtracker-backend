@@ -24,6 +24,8 @@ A robust Node.js backend API for medical tracking and management system. This ap
 - **Test Management**: Track and manage medical test records
 - **Appointment Scheduling**: Manage doctor appointments
 - **Medication Tracking**: Track prescriptions and schedules
+- **AI Medical Summaries**: Automated LLaMA-based medical report extraction with structured markdown response formatting
+- **Secure Document Handling**: Secure internal proxy routing for sensitive medical PDFs to prevent unauthorized access
 - **Activity Monitoring**: View recent account activity
 - **Middleware Protection**: Route protection with authentication middleware
 - **Database Integration**: Structured data models for users, reports, tests, appointments, and medications
@@ -36,7 +38,7 @@ A robust Node.js backend API for medical tracking and management system. This ap
 - **Authentication**: JWT (JSON Web Tokens)
 - **Language**: JavaScript (ES6+)
 - **Cloud Storage**: Cloudinary
-- **AI Integration**: Hugging Face (Llama), Google Gemini
+- **AI Integration**: Hugging Face (Llama), Google Gemini, NVIDIA NIM (Llama)
 
 ## Project Structure
 
@@ -139,6 +141,7 @@ CLOUDINARY_API_SECRET=your_api_secret
 # AI Integration (Optional)
 HF_TOKEN=your_hugging_face_token
 GEMINI_API_KEY=your_gemini_api_key
+NVIDIA_API_KEY=your_nvidia_api_key
 
 # Optional: CORS Configuration
 CLIENT_URL=http://localhost:3000
@@ -224,6 +227,18 @@ The server will start on `http://localhost:5000` (or your configured PORT).
 |--------|----------|-------------|---------------|
 | GET | `/api/activity` | Get recent activity | Yes |
 
+### Chatbot Routes (`/api/chatbot`)
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/chatbot/chat` | Send message to AI Assistant | Yes |
+
+### Contact Routes (`/api/contact`)
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/contact` | Submit contact/support form | Yes |
+
 ## Authentication
 
 This API uses JWT (JSON Web Tokens) for authentication. Include the token in the Authorization header for protected routes:
@@ -253,6 +268,14 @@ Authorization: Bearer <your_jwt_token>
 ### Test Model
 
 - User, Test Name, Result, Reference Range, Unit, Date
+
+### ContactMessage Model
+
+- Name, Email, Subject, Message, Status, Date
+
+### Healthmetric Model
+
+- User, Blood Pressure, Heart Rate, Weight, Height, Blood Sugar, Date
 
 ## Contributing
 
