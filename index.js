@@ -17,6 +17,8 @@ import appointmentRoutes from "./routes/appointmentRoutes.js";
 import medicationRoutes from "./routes/medicationRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
+import chatbotRoutes from "./routes/chatbotRoutes.js";
+import contactRoutes from "./routes/contactRoutes.js";
 import errorHandler from "./middleware/errorMiddleware.js";
 
 const app = express();
@@ -38,9 +40,7 @@ app.use(
       if (!origin) return callback(null, true);
       
       const isAllowed = allowedOrigins.includes(origin) || 
-                       origin.includes("localhost:3000") ||
-                       origin.endsWith(".vercel.app") || 
-                       /https:\/\/medtracker-frontend-.*\.vercel\.app/.test(origin);
+                       origin.includes("localhost:3000");
 
       if (isAllowed) {
         callback(null, true);
@@ -62,14 +62,14 @@ app.use(helmet({
 app.use(morgan("combined", { stream: { write: (message) => logger.info(message.trim()) } }));
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limit each IP to 500 requests per windowMs
+  windowMs: 15 * 60 * 1000, 
+  max: 100, 
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use(limiter);
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
 connectDB();
@@ -85,6 +85,8 @@ app.use("/api/tests", testRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/medications", medicationRoutes);
 app.use("/api/activity", activityRoutes);
+app.use("/api/chatbot", chatbotRoutes);
+app.use("/api/contact", contactRoutes);
 
 app.use(errorHandler);
 

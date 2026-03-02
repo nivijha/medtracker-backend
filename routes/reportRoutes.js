@@ -3,6 +3,8 @@ import {
   uploadReport,
   getMyReports,
   deleteReport,
+  analyzeReport,
+  streamPdf,
 } from "../controllers/reportController.js";
 import protect from "../middleware/authMiddleware.js";
 import upload from "../middleware/uploadMiddleware.js";
@@ -34,5 +36,19 @@ router.get("/my", protect, getMyReports);
  * @access  Private
  */
 router.delete("/:id", protect, deleteReport);
+
+/**
+ * @route   GET /api/reports/:id/analyze
+ * @desc    Analyze a report using AI summary
+ * @access  Private
+ */
+router.get("/:id/analyze", protect, analyzeReport);
+
+/**
+ * @route   GET /api/reports/:id/pdf
+ * @desc    Stream a PDF from Cloudinary via the backend (avoids CORS/auth issues)
+ * @access  Private
+ */
+router.get("/:id/pdf", protect, streamPdf);
 
 export default router;

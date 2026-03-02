@@ -15,7 +15,6 @@ const protect = async (req, res, next) => {
     token = req.cookies.token;
   }
 
-  console.log("AUTH TOKEN RECEIVED:", token);
 
   if (!token) {
     return res.status(401).json({ message: "No token provided" });

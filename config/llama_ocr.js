@@ -37,5 +37,3 @@ For every medication identified in the document, extract:
         },
     ],
 });
-
-console.log(chatCompletion.choices[0].message);
