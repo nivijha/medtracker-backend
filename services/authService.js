@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import User from "../models/User.js";
 
 const generateToken = (id) =>
@@ -31,6 +32,47 @@ export const loginUserService = async ({ email, password }) => {
   if (!isMatch) {
     throw new Error("Invalid credentials");
   }
+
+  const token = generateToken(user._id);
+  return { user, token };
+};
+
+export const forgotPasswordService = async (email) => {
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new Error("There is no user with that email");
+  }
+
+  // Get reset token
+  const resetToken = user.getResetPasswordToken();
+
+  await user.save({ validateBeforeSave: false });
+
+  return { user, resetToken };
+};
+
+export const resetPasswordService = async (resetToken, newPassword) => {
+  // Get hashed token
+  const resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  const user = await User.findOne({
+    resetPasswordToken,
+    resetPasswordExpire: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    throw new Error("Invalid or expired token");
+  }
+
+  // Set new password
+  user.password = newPassword;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
+
+  await user.save();
 
   const token = generateToken(user._id);
   return { user, token };

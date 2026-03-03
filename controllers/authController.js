@@ -1,5 +1,6 @@
-import { registerUserService, loginUserService } from "../services/authService.js";
+import { registerUserService, loginUserService, forgotPasswordService, resetPasswordService } from "../services/authService.js";
 import { validationResult } from "express-validator";
+import sendEmail from "../utils/sendEmail.js";
 
 /**
  * @desc    Send token in cookie and response
@@ -108,3 +109,74 @@ export const logoutUser = (req, res) => {
   res.status(200).json({ message: "Logged out successfully" });
 };
 
+/**
+ * @desc    Forgot Password
+ * @route   POST /api/auth/forgotpassword
+ * @access  Public
+ */
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    let serviceResult;
+    try {
+      serviceResult = await forgotPasswordService(email);
+    } catch (error) {
+      return res.status(404).json({ message: error.message });
+    }
+
+    const { user, resetToken } = serviceResult;
+
+    // Create reset URL (Client-facing URL)
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+    const resetUrl = `${clientUrl}/resetpassword/${resetToken}`;
+
+    const message = `You are receiving this email because you (or someone else) requested a password reset. Please click on the following link, or paste this into your browser to complete the process:\n\n${resetUrl}`;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: "Password Reset Token",
+        message,
+      });
+
+      res.status(200).json({ success: true, message: "Email sent" });
+    } catch (err) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      console.error("Email send error:", err);
+      return res.status(500).json({ message: "Email could not be sent" });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc    Reset Password
+ * @route   PUT /api/auth/resetpassword/:resettoken
+ * @access  Public
+ */
+export const resetPassword = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { password } = req.body;
+    let serviceResult;
+    try {
+      serviceResult = await resetPasswordService(req.params.resettoken, password);
+    } catch (error) {
+      return res.status(400).json({ message: error.message });
+    }
+
+    const { user, token } = serviceResult;
+
+    sendToken(res, user, token, "Password reset successful");
+  } catch (err) {
+    next(err);
+  }
+};

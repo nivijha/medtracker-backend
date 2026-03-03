@@ -171,6 +171,8 @@ The server will start on `http://localhost:5000` (or your configured PORT).
 |--------|----------|-------------|---------------|
 | POST | `/api/auth/register` | Register new user | No |
 | POST | `/api/auth/login` | User login | No |
+| POST | `/api/auth/forgotpassword` | Forgot password (sends email) | No |
+| PUT | `/api/auth/resetpassword/:resettoken` | Reset password using token | No |
 | GET | `/api/auth/me` | Get current user | Yes |
 | POST | `/api/auth/logout` | User logout | Yes (cookie clearing) |
 

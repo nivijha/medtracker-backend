@@ -4,7 +4,9 @@ import {
   registerUser,
   loginUser,
   getUserProfile,
-  logoutUser
+  logoutUser,
+  forgotPassword,
+  resetPassword
 } from "../controllers/authController.js";
 import protect from "../middleware/authMiddleware.js";
 
@@ -34,5 +36,16 @@ router.post(
 
 router.post("/logout", protect, logoutUser);
 router.get("/me", protect, getUserProfile);
+
+router.post("/forgotpassword", forgotPassword);
+router.put(
+  "/resetpassword/:resettoken",
+  [
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters"),
+  ],
+  resetPassword
+);
 
 export default router;
