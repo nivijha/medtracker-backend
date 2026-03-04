@@ -49,6 +49,9 @@ export const registerUser = async (req, res, next) => {
 
     sendToken(res, user, token, "Registration successful");
   } catch (err) {
+    if (err.message === "User already exists") {
+      return res.status(409).json({ message: "User already exists" });
+    }
     next(err);
   }
 };
@@ -71,7 +74,10 @@ export const loginUser = async (req, res, next) => {
     sendToken(res, user, token, "Login successful");
   } catch (err) {
     if (err.message === "Invalid credentials") {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+    if (err.name === "ValidationError") {
+      return res.status(400).json({ message: err.message });
     }
     next(err);
   }

@@ -70,6 +70,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 connectDB();
