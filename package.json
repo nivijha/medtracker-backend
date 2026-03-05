@@ -33,7 +33,6 @@
     "nodemailer": "^8.0.1",
     "openai": "^6.25.0",
     "pdf-parse": "^2.4.5",
-    "react-markdown": "^10.1.0",
     "winston": "^3.19.0"
   },
   "devDependencies": {
