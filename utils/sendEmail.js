@@ -18,15 +18,33 @@ const sendEmail = async (options) => {
       },
     });
   } else {
-    // Basic configured transporter
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT || 587,
-      auth: {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
+    // Determine configuration based on the host
+    const smtpHost = process.env.SMTP_HOST;
+    const isGmail = smtpHost.includes("gmail");
+    
+    const transportConfig = isGmail 
+      ? {
+          service: "gmail",
+          auth: {
+            user: process.env.SMTP_EMAIL,
+            pass: process.env.SMTP_PASSWORD,
+          },
+        }
+      : {
+          host: smtpHost,
+          port: process.env.SMTP_PORT || 587,
+          secure: process.env.SMTP_PORT == 465, // true for 465, false for 587
+          auth: {
+            user: process.env.SMTP_EMAIL,
+            pass: process.env.SMTP_PASSWORD,
+          },
+          tls: {
+            // Do not fail on invalid certs – common in some cloud setups
+            rejectUnauthorized: false
+          }
+        };
+
+    transporter = nodemailer.createTransport(transportConfig);
   }
 
   // Message object
