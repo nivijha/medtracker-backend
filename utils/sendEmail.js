@@ -24,11 +24,16 @@ const sendEmail = async (options) => {
     
     const transportConfig = isGmail 
       ? {
-          service: "gmail",
+          host: "smtp.gmail.com",
+          port: 465,
+          secure: true, // use SSL
           auth: {
             user: process.env.SMTP_EMAIL,
             pass: process.env.SMTP_PASSWORD,
           },
+          connectionTimeout: 10000, // 10 seconds
+          greetingTimeout: 10000,
+          socketTimeout: 10000,
         }
       : {
           host: smtpHost,
@@ -39,9 +44,11 @@ const sendEmail = async (options) => {
             pass: process.env.SMTP_PASSWORD,
           },
           tls: {
-            // Do not fail on invalid certs – common in some cloud setups
             rejectUnauthorized: false
-          }
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 10000,
         };
 
     transporter = nodemailer.createTransport(transportConfig);
