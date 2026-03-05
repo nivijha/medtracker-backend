@@ -14,8 +14,8 @@ const sendToken = (res, user, token, message) => {
   
   res.cookie("token", token, {
     httpOnly: true,
-    secure: true, // MUST be true for cross-site cookies
-    sameSite: "none", // MUST be "none" for cross-site cookies (Vercel -> Render)
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
@@ -28,7 +28,7 @@ const sendToken = (res, user, token, message) => {
       phone: user.phone,
       profileImage: user.profileImage || "",
     },
-    token, // Keeping for backward compatibility if needed, but cookie is primary
+    token,
   });
 };
 
@@ -105,10 +105,12 @@ export const getUserProfile = async (req, res, next) => {
  * @access  Private
  */
 export const logoutUser = (req, res) => {
+  const isProduction = process.env.NODE_ENV === "production";
+  
   res.cookie("token", "", {
     httpOnly: true,
-    secure: true,
-    sameSite: "none",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     expires: new Date(0),
   });
   res.status(200).json({ message: "Logged out successfully" });
