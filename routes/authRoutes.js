@@ -6,8 +6,9 @@ import {
   getUserProfile,
   logoutUser,
   forgotPassword,
-  resetPassword
+  resetPassword,
 } from "../controllers/authController.js";
+import { googleLogin } from "../controllers/googleAuthController.js";
 import protect from "../middleware/authMiddleware.js";
 import rateLimit from "express-rate-limit";
 
@@ -59,5 +60,7 @@ router.put(
   ],
   resetPassword
 );
+
+router.post("/google", googleLogin);
 
 export default router;
