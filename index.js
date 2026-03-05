@@ -40,7 +40,7 @@ app.use(
       if (!origin) return callback(null, true);
       
       const isAllowed = allowedOrigins.includes(origin) || 
-                       origin.includes("localhost:3000");
+                       origin === "http://localhost:3000";
 
       if (isAllowed) {
         callback(null, true);

@@ -182,7 +182,7 @@ export const chatWithAI = async (req, res) => {
 
       const appointment = await Appointment.findOne({
         user: userId,
-        doctorName: { $regex: entities.doctorName, $options: "i" },
+        doctorName: { $regex: String(entities.doctorName), $options: "i" },
         status: "scheduled",
       });
 
@@ -247,7 +247,7 @@ export const chatWithAI = async (req, res) => {
 
       const medication = await Medication.findOneAndDelete({
         user: userId,
-        name: { $regex: entities.medicationName, $options: "i" },
+        name: { $regex: String(entities.medicationName), $options: "i" },
       });
 
       if (!medication) {

@@ -9,11 +9,21 @@ import {
   resetPassword
 } from "../controllers/authController.js";
 import protect from "../middleware/authMiddleware.js";
+import rateLimit from "express-rate-limit";
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // limit each IP to 20 requests per windowMs
+  message: "Too many requests from this IP, please try again after 15 minutes",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = express.Router();
 
 router.post(
   "/register",
+  authLimiter,
   [
     body("name").notEmpty().withMessage("Name is required"),
     body("email").isEmail().withMessage("Please include a valid email"),
@@ -27,6 +37,7 @@ router.post(
 
 router.post(
   "/login",
+  authLimiter,
   [
     body("email").isEmail().withMessage("Please include a valid email"),
     body("password").exists().withMessage("Password is required"),
@@ -37,9 +48,10 @@ router.post(
 router.post("/logout", protect, logoutUser);
 router.get("/me", protect, getUserProfile);
 
-router.post("/forgotpassword", forgotPassword);
+router.post("/forgotpassword", authLimiter, forgotPassword);
 router.put(
   "/resetpassword/:resettoken",
+  authLimiter,
   [
     body("password")
       .isLength({ min: 6 })

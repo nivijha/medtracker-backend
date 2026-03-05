@@ -39,17 +39,12 @@ const sendEmail = async (options) => {
     text: options.message,
     html: options.html,
   };
-
-  const info = await transporter.sendMail(message);
-
-  if (!process.env.SMTP_HOST || !process.env.SMTP_EMAIL) {
-    console.log("-----------------------------------------");
-    console.log("📧 TEST EMAIL SENT VIA ETHEREAL");
-    console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
-    console.log("👆 CLICK THIS LINK TO SEE THE EMAIL 👆");
-    console.log("-----------------------------------------");
-  } else {
+  try {
+    const info = await transporter.sendMail(message);
     console.log("Message sent: %s", info.messageId);
+  } catch (error) {
+    console.error("NODEMAILER ERROR:", error);
+    throw error;
   }
 };
 
