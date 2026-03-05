@@ -18,7 +18,7 @@ A robust Node.js backend API for medical tracking and management system. This ap
 
 ## Features
 
-- **User Authentication**: Secure user registration and login with JWT
+- **User Authentication**: Secure user registration, login with JWT, and **Direct Google Login (OAuth 2.0)**
 - **User Management**: Complete CRUD operations for user profiles
 - **Medical Reports**: Create, read, update, and delete medical reports
 - **Test Management**: Track and manage medical test records
@@ -54,6 +54,7 @@ medtracker-backend/
 │   ├── activityController.js    # Activity logic
 │   ├── appointmentController.js # Appointment logic
 │   ├── authController.js        # Authentication logic
+│   ├── googleAuthController.js  # Google OAuth logic
 │   ├── medicationController.js  # Medication logic
 │   ├── miscController.js        # Miscellaneous logic
 │   ├── profileController.js     # User profile logic
@@ -87,7 +88,6 @@ medtracker-backend/
 ├── .env.example              # Example environment variables
 ├── .gitignore                # Git ignore file
 ├── index.js                  # Application entry point
-├── middleware.js             # Global middleware configuration
 ├── package.json              # Project dependencies
 └── package-lock.json         # Locked dependencies
 ```
@@ -171,8 +171,7 @@ The server will start on `http://localhost:5000` (or your configured PORT).
 |--------|----------|-------------|---------------|
 | POST | `/api/auth/register` | Register new user | No |
 | POST | `/api/auth/login` | User login | No |
-| POST | `/api/auth/forgotpassword` | Forgot password (sends email) | No |
-| PUT | `/api/auth/resetpassword/:resettoken` | Reset password using token | No |
+| POST | `/api/auth/google` | Direct Google Login | No |
 | GET | `/api/auth/me` | Get current user | Yes |
 | POST | `/api/auth/logout` | User logout | Yes (cookie clearing) |
 
