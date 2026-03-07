@@ -9,11 +9,18 @@ const storage = new CloudinaryStorage({
     if (file.mimetype === "application/pdf" || file.originalname.match(/\.(pdf|doc|docx)$/i)) {
       resource_type = "raw";
     }
-    return {
+
+    const params = {
       folder: "medtracker/reports",
-      allowed_formats: ["jpg", "png", "pdf", "docx", "doc"],
       resource_type: resource_type,
     };
+
+    // allowed_formats is only for images/videos, not for 'raw'
+    if (resource_type !== "raw") {
+      params.allowed_formats = ["jpg", "png", "webp"];
+    }
+
+    return params;
   },
 });
 

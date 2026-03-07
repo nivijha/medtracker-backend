@@ -1,10 +1,7 @@
 import Report from "../models/Report.js";
 import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
-import { generateReportSummary } from "../config/llama_summary.js";
+import { analyzeMedicalReport } from "../services/aiService.js";
 
 /**
  * @desc    Upload a medical report
@@ -15,21 +12,29 @@ const uploadReport = async (req, res, next) => {
   try {
     const { type, description, doctorName, reportDate } = req.body;
 
+    logger.info(`UPLOAD_REPORT: received upload request for type=${type}, doctor=${doctorName}`);
+
     if (!type || !req.file) {
+      logger.warn("UPLOAD_REPORT: missing required fields or file");
       return res.status(400).json({
         message: "Report type and file are required",
       });
     }
+
+    logger.info(`UPLOAD_REPORT: file received => ${req.file.originalname}, path=${req.file.path}`);
 
     const report = await Report.create({
       user: req.user.id,
       type,
       fileUrl: req.file.path,
       cloudinaryId: req.file.filename,
+      mimeType: req.file.mimetype,
       description,
       doctorName,
       reportDate: reportDate ? new Date(reportDate) : new Date(),
     });
+
+    logger.info(`UPLOAD_REPORT: successfully created report record => id=${report._id}`);
 
     res.status(201).json({
       message: "Report uploaded successfully",
@@ -106,7 +111,7 @@ const deleteReport = async (req, res, next) => {
 };
 
 /**
- * @desc    Analyze a medical report using AI
+ * @desc    Analyze a medical report using AI (Gemini Multimodal)
  * @route   GET /api/reports/:id/analyze
  * @access  Private
  */
@@ -122,33 +127,31 @@ const analyzeReport = async (req, res, next) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Fetch the PDF from Cloudinary URL
-    const pdfRes = await fetch(report.fileUrl);
-    if (!pdfRes.ok) {
-      let errorBody = "";
-      try { errorBody = await pdfRes.text(); } catch(e) {}
-      throw new Error(`Failed to fetch PDF (${report.fileUrl}). Status: ${pdfRes.status} ${pdfRes.statusText}. Body: ${errorBody}`);
+    // Use signed URL or direct download via Cloudinary SDK if possible
+    // This avoids 401 issues with direct fetch
+    const fetchUrl = cloudinary.url(report.cloudinaryId, { secure: true });
+    
+    logger.info(`ANALYZE_REPORT: fetching file from ${fetchUrl}`);
+    const fileRes = await fetch(fetchUrl);
+    if (!fileRes.ok) {
+      throw new Error(`Failed to fetch report. Status: ${fileRes.status}`);
     }
 
-    const arrayBuffer = await pdfRes.arrayBuffer();
+    const arrayBuffer = await fileRes.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Verify it's actually a PDF using the magic string %PDF
-    if (buffer.length < 4 || buffer.slice(0, 4).toString() !== "%PDF") {
-      return res.status(400).json({ message: "The selected file is not a valid PDF document and cannot be analyzed." });
+    // Get mime type from database or extension
+    let mimeType = report.mimeType;
+    if (!mimeType) {
+      const extension = report.fileUrl.split(".").pop().toLowerCase();
+      if (["jpg", "jpeg"].includes(extension)) mimeType = "image/jpeg";
+      else if (extension === "png") mimeType = "image/png";
+      else if (extension === "webp") mimeType = "image/webp";
+      else mimeType = "application/pdf";
     }
 
-    // Parse text from the PDF Buffer
-    const parser = new pdfParse.PDFParse({ data: buffer });
-    const pdfData = await parser.getText();
-    await parser.destroy();
-    
-    if (!pdfData.text || pdfData.text.trim().length === 0) {
-      return res.status(400).json({ message: "Could not extract any readable text from this PDF." });
-    }
-
-    // Pass text to HuggingFace LLaMA
-    const summary = await generateReportSummary(pdfData.text);
+    // Use Gemini Service for Multimodal Analysis
+    const summary = await analyzeMedicalReport(buffer, mimeType);
 
     res.json({ summary });
   } catch (error) {
@@ -175,27 +178,40 @@ const streamPdf = async (req, res, next) => {
     }
 
     let fetchUrl = report.fileUrl;
-    let pdfRes = await fetch(fetchUrl);
-
-    logger.info(`STREAM_PDF: fetched ${fetchUrl} => ${pdfRes.status}`);
-
-    // Fallback: old reports used image/upload — try raw/upload instead
-    if (!pdfRes.ok && fetchUrl.includes("/image/upload/")) {
-      fetchUrl = fetchUrl.replace("/image/upload/", "/raw/upload/");
-      pdfRes = await fetch(fetchUrl);
-      logger.info(`STREAM_PDF fallback: fetched ${fetchUrl} => ${pdfRes.status}`);
-    }
-
-    if (!pdfRes.ok) {
-      logger.warn(`STREAM_PDF: could not fetch PDF, status=${pdfRes.status}, url=${fetchUrl}`);
-      return res.status(422).json({
-        message: "This report cannot be previewed. It may have been uploaded in an older format.",
-        cannotPreview: true,
+    const isImage = fetchUrl.match(/\.(jpg|jpeg|png|webp)$/i);
+    
+    if (isImage) {
+      // Use Cloudinary SDK to generate a reliable URL for the PDF conversion
+      // This is more robust than manual string replacement
+      fetchUrl = cloudinary.url(report.cloudinaryId, {
+        fetch_format: "pdf",
+        secure: true,
+        // sign_url: true // Add if your assets are restricted
       });
     }
 
+    logger.info(`STREAM_PDF: fetching from ${fetchUrl}`);
+    let pdfRes = await fetch(fetchUrl);
+
+    if (!pdfRes.ok) {
+      logger.warn(`STREAM_PDF: fetch failed (${pdfRes.status}), trying signed fallback`);
+      // Force a signed URL if direct access is restricted
+      const signedUrl = cloudinary.url(report.cloudinaryId, {
+        fetch_format: isImage ? "pdf" : undefined,
+        sign_url: true,
+        secure: true
+      });
+      pdfRes = await fetch(signedUrl);
+    }
+
+    if (!pdfRes.ok) {
+      logger.error(`STREAM_PDF: failed to retrieve file even with fallback`);
+      return res.status(422).json({ message: "Report retrieval failed." });
+    }
+
+    const filename = (report.description || "medical-report").replace(/[^a-z0-9]/gi, "_").toLowerCase() + ".pdf";
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
     const arrayBuffer = await pdfRes.arrayBuffer();
     res.send(Buffer.from(arrayBuffer));

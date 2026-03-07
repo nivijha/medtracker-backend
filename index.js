@@ -75,6 +75,10 @@ app.use(cookieParser());
 
 connectDB();
 
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", time: new Date().toISOString() });
+});
+
 app.get("/", (req, res) => {
   res.send("MedTracker API running");
 });
