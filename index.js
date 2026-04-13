@@ -124,7 +124,7 @@ app.get("/contact", (req, res) => {
                 const data = Object.fromEntries(formData);
 
                 try {
-                    const response = await fetch('/api/contact', {
+                    const response = await fetch('/contact', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -150,6 +150,32 @@ app.get("/contact", (req, res) => {
     </body>
     </html>
   `);
+});
+
+// Handle contact form submissions at /contact
+app.post("/contact", async (req, res, next) => {
+  try {
+    const { name, email, message } = req.body;
+
+    if (!name || !email || !message) {
+      return res.status(400).json({ message: "Please provide all required fields (name, email, message)" });
+    }
+
+    const ContactMessage = (await import("./models/ContactMessage.js")).default;
+    const contactMessage = await ContactMessage.create({
+      name,
+      email,
+      message,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Message sent successfully",
+      data: contactMessage,
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.use("/api/auth", authRoutes);

@@ -239,6 +239,7 @@ The server will start on `http://localhost:5000` (or your configured PORT).
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | GET | `/contact` | Serve HTML contact form page | No |
+| POST | `/contact` | Submit contact/support form | No |
 | POST | `/api/contact` | Submit contact/support form | No |
 | GET | `/api/contact` | Fallback for simple HTML form submissions | No |
 | GET | `/api/contact/form` | Serve HTML contact form page | No |
