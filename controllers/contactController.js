@@ -3,11 +3,16 @@ import ContactMessage from "../models/ContactMessage.js";
 /**
  * @desc    Submit a contact form message
  * @route   POST /api/contact
+ *          GET  /api/contact (fallback for simple HTML forms)
  * @access  Public
  */
 export const submitContactForm = async (req, res, next) => {
   try {
-    const { name, email, message } = req.body;
+    const payload = {
+      ...req.query,
+      ...req.body,
+    };
+    const { name, email, message } = payload;
 
     if (!name || !email || !message) {
       return res.status(400).json({ message: "Please provide all required fields (name, email, message)" });
