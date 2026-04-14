@@ -20,7 +20,7 @@ Supported intents:
 - add_medication        → user wants to add a new medication
 - remove_medication     → user wants to remove/stop a medication
 - view_reports          → user wants to see their medical reports
-- general               → anything else (health questions, chitchat, etc.)
+- out_of_scope          → anything unrelated to appointments, medications, reports, or your MedTracker app
 
 For date fields output ISO 8601 date (YYYY-MM-DD). Today is ${new Date().toISOString().split("T")[0]}.
 For time fields output 24-hour HH:MM format.
@@ -109,11 +109,17 @@ export const chatWithAI = async (req, res) => {
       const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      // JSON parse failed → fall back to a general health assistant reply
-      parsed = { intent: "general", entities: {} };
+      // JSON parse failed → treat as out-of-scope/unrelated query
+      parsed = { intent: "out_of_scope", entities: {} };
     }
 
     const { intent, entities = {} } = parsed;
+
+    if (intent === "out_of_scope") {
+      return res.json({
+        reply: "Sorry, this is beyond my scope. I can only help with your MedTracker appointments, medications, reports, and other app-related tasks."
+      });
+    }
 
     /* ── STEP 2: Execute DB action based on intent ── */
 
@@ -281,16 +287,9 @@ export const chatWithAI = async (req, res) => {
       return res.json({ reply: reply.trim() });
     }
 
-    /* -------- GENERAL AI HEALTH ASSISTANT -------- */
-
-    const HEALTH_SYSTEM_PROMPT = `You are MedTracker AI, a knowledgeable medical assistant.
-Help users with health questions, medication guidance, and general wellness advice.
-Keep responses concise, clear, and easy to understand.
-Do not use emojis. Use plain text only.
-Always recommend consulting a qualified doctor for serious health concerns.`;
-
-    const healthReply = await llamaChat(HEALTH_SYSTEM_PROMPT, userMessage);
-    return res.json({ reply: healthReply });
+    return res.json({
+      reply: "Sorry, this is beyond my scope. I can only help with your MedTracker appointments, medications, reports, and other app-related tasks."
+    });
 
   } catch (error) {
     console.error("CHATBOT ERROR:", error.message);
