@@ -12,6 +12,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      MONGOMS_DOWNLOAD_DIR: ${{ runner.temp }}/mongodb-binaries
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,6 +22,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Cache MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-8.2.6
       - run: npm test
 
   deploy:
