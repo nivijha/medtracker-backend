@@ -1,5 +1,7 @@
 # MedTracker Backend
 
+![CI](https://github.com/nivijha/medtracker-backend/actions/workflows/ci.yml/badge.svg)
+
 A robust Node.js backend API for medical tracking and management system. This application provides secure authentication, user management, and comprehensive medical reporting features.
 
 ## Table of Contents
@@ -162,6 +164,45 @@ npm start
 ```
 
 The server will start on `http://localhost:5000` (or your configured PORT).
+
+## CI/CD Pipeline
+
+This repository uses GitHub Actions for continuous integration and delivery.
+
+### Workflow (`.github/workflows/ci.yml`)
+
+1. **Test job** — runs on every push and pull request:
+   - `npm ci` (clean install from the lockfile)
+   - `npm run check` (syntax validation across all `.js` files)
+   - `npm test` (vitest unit + integration tests using an in-memory MongoDB)
+2. **Deploy job** — runs on pushes to `main`, only after the test job passes:
+   - Triggers a Render deploy by POSTing to the `RENDER_DEPLOY_HOOK` secret.
+   - If the secret is not configured, the job exits cleanly without deploying.
+
+### Enabling auto-deploy to Render
+
+1. Create a free Render Web Service linked to this repo (start command: `npm start`, no build step).
+2. In Render → your service → **Settings → Deploy Hook**, copy the hook URL.
+3. In GitHub → repository → **Settings → Secrets and variables → Actions**, add the hook URL as a secret named `RENDER_DEPLOY_HOOK`.
+4. Push to `main` — tests run first, then Render deploys.
+
+### Required environment variables (set in Render, not committed)
+
+```env
+NODE_ENV=production
+MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/medtracker
+JWT_SECRET=your_super_secret_jwt_key
+JWT_EXPIRE=7d
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+HF_TOKEN=your_hugging_face_token
+GEMINI_API_KEY=your_gemini_api_key
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+CLIENT_URL=https://your-frontend.vercel.app
+ALLOWED_ORIGINS=https://your-frontend.vercel.app
+REDIS_URL=redis://your-redis-host:6379   # optional; summary caching falls back to MongoDB
+```
 
 ## API Endpoints
 

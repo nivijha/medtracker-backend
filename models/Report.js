@@ -42,8 +42,18 @@ const reportSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
+
+    summary: {
+      type: String,
+    },
+
+    summaryGeneratedAt: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );
+
+reportSchema.index({ user: 1, createdAt: -1 });
 
 export default mongoose.model("Report", reportSchema);

@@ -41,4 +41,6 @@ const testSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+testSchema.index({ user: 1, testDate: -1 });
+
 export default mongoose.model("Test", testSchema);

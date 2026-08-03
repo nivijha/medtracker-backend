@@ -28,4 +28,6 @@ const healthMetricSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+healthMetricSchema.index({ user: 1, recordedAt: -1 });
+
 export default mongoose.model("HealthMetric", healthMetricSchema);

@@ -1,10 +1,13 @@
 import Report from "../models/Report.js";
 import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
-import { generateReportSummary } from "../config/llama_summary.js";
+import { generateReportSummary } from "../services/reportSummaryService.js";
+import { extractTextFromPdf, isPdfBuffer } from "../services/pdfExtractionService.js";
+import {
+  getSummaryFromRedis,
+  setSummaryInRedis,
+  deleteSummaryFromRedis,
+} from "../services/summaryCacheService.js";
 
 /**
  * @desc    Upload a medical report
@@ -99,6 +102,9 @@ const deleteReport = async (req, res, next) => {
     // DELETE FROM DB
     await report.deleteOne();
 
+    // Invalidate cached summary so no stale data is served
+    await deleteSummaryFromRedis(report._id.toString());
+
     res.json({ message: "Report deleted successfully" });
   } catch (error) {
     next(error);
@@ -122,7 +128,19 @@ const analyzeReport = async (req, res, next) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Fetch the PDF from Cloudinary URL
+    // 1. Redis hot cache
+    const cachedSummary = await getSummaryFromRedis(report._id.toString());
+    if (cachedSummary) {
+      return res.json({ summary: cachedSummary, cached: true });
+    }
+
+    // 2. MongoDB source of truth
+    if (report.summary) {
+      await setSummaryInRedis(report._id.toString(), report.summary);
+      return res.json({ summary: report.summary, cached: true });
+    }
+
+    // 3. Generate once, persist to both stores
     const pdfRes = await fetch(report.fileUrl);
     if (!pdfRes.ok) {
       let errorBody = "";
@@ -134,23 +152,27 @@ const analyzeReport = async (req, res, next) => {
     const buffer = Buffer.from(arrayBuffer);
 
     // Verify it's actually a PDF using the magic string %PDF
-    if (buffer.length < 4 || buffer.slice(0, 4).toString() !== "%PDF") {
+    if (!isPdfBuffer(buffer)) {
       return res.status(400).json({ message: "The selected file is not a valid PDF document and cannot be analyzed." });
     }
 
     // Parse text from the PDF Buffer
-    const parser = new pdfParse.PDFParse({ data: buffer });
-    const pdfData = await parser.getText();
-    await parser.destroy();
-    
-    if (!pdfData.text || pdfData.text.trim().length === 0) {
+    const pdfText = await extractTextFromPdf(buffer);
+
+    if (!pdfText || pdfText.trim().length === 0) {
       return res.status(400).json({ message: "Could not extract any readable text from this PDF." });
     }
 
-    // Pass text to HuggingFace LLaMA
-    const summary = await generateReportSummary(pdfData.text);
+    // Pass text to the AI summary service (LLaMA with Gemini fallback)
+    const summary = await generateReportSummary(pdfText);
 
-    res.json({ summary });
+    report.summary = summary;
+    report.summaryGeneratedAt = new Date();
+    await report.save();
+
+    await setSummaryInRedis(report._id.toString(), summary);
+
+    res.json({ summary, cached: false });
   } catch (error) {
     logger.error("REPORT_ANALYZE_CRASH: " + (error.stack || error.message || JSON.stringify(error)));
     next(error);

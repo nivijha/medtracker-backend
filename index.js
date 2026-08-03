@@ -8,6 +8,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import connectDB from "./config/db.js";
+import { connectRedis } from "./config/redis.js";
 import logger from "./utils/logger.js";
 
 import authRoutes from "./routes/authRoutes.js";
@@ -73,7 +74,10 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-connectDB();
+if (process.env.NODE_ENV !== "test") {
+  connectDB();
+  connectRedis();
+}
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
@@ -192,6 +196,11 @@ app.use(errorHandler);
 
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  logger.info(`Server running on port ${PORT}`)
-);
+
+if (process.env.NODE_ENV !== "test") {
+  app.listen(PORT, () =>
+    logger.info(`Server running on port ${PORT}`)
+  );
+}
+
+export default app;
