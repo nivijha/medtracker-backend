@@ -34,13 +34,15 @@ A robust Node.js backend API for medical tracking and management system. This ap
 
 ## Tech Stack
 
-- **Runtime**: Node.js
-- **Framework**: Express.js
-- **Database**: MongoDB
-- **Authentication**: JWT (JSON Web Tokens)
-- **Language**: JavaScript (ES6+)
-- **Cloud Storage**: Cloudinary
-- **AI Integration**: Hugging Face (Llama), Google Gemini, NVIDIA NIM (Llama)
+- **Frontend**: Next.js, React.js
+- **Backend**: Node.js, Express.js
+- **Database**: MongoDB (Mongoose)
+- **Authentication**: JWT + Google OAuth 2.0
+- **AI Integration**: Google Gemini, LLaMA (Hugging Face, NVIDIA NIM)
+- **File Uploads**: Multer, Cloudinary
+- **Caching**: Redis
+- **Tools**: Nodemailer, pdf-parse, Winston
+- **Planned RAG subsystem**: FastAPI service + PostgreSQL/pgvector (see below)
 
 ## Project Structure
 
@@ -323,6 +325,18 @@ Authorization: Bearer <your_jwt_token>
 
 - User, Blood Pressure, Heart Rate, Weight, Height, Blood Sugar, Date
 
+## Evidence-Grounded RAG Subsystem (Planned)
+
+MedTracker is being extended with an **evidence-grounded RAG subsystem** for querying across a user's historical medical records. Key design points (all documented under [`docs/architecture`](./docs/architecture/README.md)):
+
+- **FastAPI `rag-service/`** performs ingestion, hybrid retrieval (vector + PostgreSQL full-text), CrossEncoder reranking, grounding/abstention, and citations.
+- **PostgreSQL + pgvector** is the retrieval/index store; **MongoDB remains the source of truth** and the RAG index is rebuildable from it.
+- **Express stays the auth gateway and generation owner**: it authenticates users and exposes an internal `/api/ai/generate` endpoint reusing the existing LLaMA→Gemini fallback. FastAPI never sees JWTs.
+- **Patient isolation is mandatory**: every retrieval filters by `user_id`; cross-user access is tested.
+- **No diagnosis/treatment**: the assistant retrieves, summarizes, and compares records only.
+
+> Status: documentation complete; implementation is additive and does not change existing APIs.
+
 ## Contributing
 
 Contributions are welcome! Please follow these steps:
@@ -336,3 +350,4 @@ Contributions are welcome! Please follow these steps:
 ## Links
 
 - [Frontend Repository](https://github.com/nivijha/medtracker-frontend)
+- [Architecture Documentation](./docs/architecture/README.md) — ADRs, data flow, security, failure modes, scalability, evaluation
