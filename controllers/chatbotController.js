@@ -1,5 +1,4 @@
 import getClient from "../config/llama_chat.js";
-import { queryRag } from "../services/ragClient.js";
 import Appointment from "../models/Appointment.js";
 import Medication from "../models/Medication.js";
 import Report from "../models/Report.js";
@@ -103,6 +102,7 @@ export const chatWithAI = async (req, res) => {
     /* 'STEP 1A: If RAG mode, query document index' ──────────────────────── */
     if (ragMode) {
       try {
+        const { queryRag } = await import("../services/ragClient.js");
         const ragResponse = await queryRag({ userId, query: userMessage });
         return res.json({
           response: ragResponse.answer || ragResponse.reply || "I've reviewed your documents, but couldn't generate a specific answer.",
