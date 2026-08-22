@@ -155,7 +155,15 @@ class PostgresRetrievalStore(RetrievalStore):
     def __init__(self, database_url: str) -> None:
         from sqlalchemy import create_engine
 
-        self._engine = create_engine(database_url, future=True)
+        # Accept plain "postgresql://" URLs (e.g., from Render) and route them
+        # through psycopg 3, which is what requirements.txt installs.
+        url = database_url
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg://", 1)
+
+        self._engine = create_engine(url, future=True)
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -168,23 +176,22 @@ class PostgresRetrievalStore(RetrievalStore):
             conn.execute(sa_text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
         Base.metadata.create_all(self._engine)
 
-def index_chunks(self, chunks: list[dict[str, Any]]) -> int:
-    from sqlalchemy import delete
-    from .db_models import DocumentChunk
+    def index_chunks(self, chunks: list[dict[str, Any]]) -> int:
+        from sqlalchemy import delete
+        from sqlalchemy.orm import Session
+        from .db_models import DocumentChunk
 
-    doc_ids = {c["document_id"] for c in chunks}
-    with self._engine.begin() as conn:
-        for did in doc_ids:
-            # Delete old chunks for this document to ensure versioning
-            conn.execute(
-                delete(DocumentChunk).where(
-                    DocumentChunk.document_id == did
+        doc_ids = {c["document_id"] for c in chunks}
+        with Session(self._engine) as session, session.begin():
+            for did in doc_ids:
+                # Delete old chunks for this document to ensure versioning
+                session.execute(
+                    delete(DocumentChunk).where(DocumentChunk.document_id == did)
                 )
-            )
             for c in chunks:
-                conn.add(
+                session.add(
                     DocumentChunk(
-                        chunk_id=c.get("chunk_id") or str(uuid.uuid4()),
+                        chunk_id=c.get("chunk_id") or uuid.uuid4(),
                         document_id=c["document_id"],
                         user_id=c["user_id"],
                         doc_type=c["doc_type"],
@@ -198,6 +205,7 @@ def index_chunks(self, chunks: list[dict[str, Any]]) -> int:
                         document_version=c.get("document_version", "v1"),
                     )
                 )
+            session.commit()
         return len(chunks)
 
     def delete_document(self, user_id: str, document_id: str) -> int:
@@ -330,7 +338,26 @@ def get_default_store() -> RetrievalStore:
     if _DEFAULT_STORE is None:
         db_url = settings.pg_rag_database_url or settings.database_url
         if db_url:
-            _DEFAULT_STORE = PostgresRetrievalStore(db_url)
+            # In production (embedding_provider=api), PostgreSQL is required.
+            # Fail fast with a clear error if connection fails.
+            provider = getattr(settings, "embedding_provider", "local")
+            if provider == "api":
+                try:
+                    _DEFAULT_STORE = PostgresRetrievalStore(db_url)
+                    # Test connection
+                    _ = _DEFAULT_STORE.health()
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to connect to PostgreSQL at PG_RAG_DATABASE_URL: {e}"
+                    ) from e
+            else:
+                # Local dev: try PostgreSQL, fall back to in-memory
+                try:
+                    _DEFAULT_STORE = PostgresRetrievalStore(db_url)
+                    _ = _DEFAULT_STORE.health()
+                except Exception:
+                    _DEFAULT_STORE = InMemoryRetrievalStore()
         else:
+            # No database URL configured: use in-memory (local dev only)
             _DEFAULT_STORE = InMemoryRetrievalStore()
     return _DEFAULT_STORE

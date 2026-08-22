@@ -1,4 +1,4 @@
-"""Reranking: interface + CrossEncoder (real) + lexical fallback (tests/offline).
+"""Reranking: interface + CrossEncoder (local) + lexical fallback (production/tests/offline).
 
 Reranking runs ONLY over the small hybrid candidate set (top-N), keeping latency
 bounded. The CrossEncoder model is imported lazily so unit tests/offline mode
@@ -40,7 +40,8 @@ class CrossEncoderReranker:
 class LexicalReranker:
     """Deterministic reranker: lexical overlap between query and chunk text.
 
-    Used as a testable/offline fallback and as the baseline reranker.
+    Used as a testable/offline fallback and as the production reranker when
+    external embedding API is used (no local ML models).
     """
 
     def rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
@@ -57,4 +58,11 @@ class LexicalReranker:
 
 
 def get_default_reranker(model_name: str | None = None) -> Reranker:
+    from .config import settings
+
+    provider = getattr(settings, "embedding_provider", "local")
+    if provider == "api":
+        # Production: no local ML models, use lightweight lexical reranker
+        return LexicalReranker()
+    # Local development / tests
     return CrossEncoderReranker(model_name or "cross-encoder/ms-marco-MiniLM-L-6-v2")

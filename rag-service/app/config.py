@@ -10,15 +10,23 @@ class Settings(BaseSettings):
     # Connection to the Express backend that owns generation (LLaMA -> Gemini)
     express_ai_url: str = "http://localhost:5000/api/ai/generate"
 
-    # PostgreSQL + pgvector. If empty, the service falls back to an in-memory store.
+    # PostgreSQL + pgvector. If empty, the service fails to start in production.
     # `pg_rag_database_url` (env PG_RAG_DATABASE_URL) takes precedence when set.
     database_url: str = ""
     pg_rag_database_url: str = ""
 
     redis_url: str = ""
 
-    # Embedding model (local sentence-transformers). 384-dim for MiniLM.
+    # Embedding provider: "local" (sentence-transformers) or "api" (Hugging Face Inference API)
+    embedding_provider: str = "local"
+
+    # Embedding model name. For local: sentence-transformers model name.
+    # For api: HF model ID (e.g., sentence-transformers/all-MiniLM-L6-v2) - 384 dims.
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+
+    # Hugging Face Inference API base URL and API key (used when embedding_provider=api)
+    embedding_api_url: str = "https://api-inference.huggingface.co"
+    embedding_api_key: str = ""
 
     # Chunking (initial defaults — validated by experiment, see docs/experiments)
     chunk_size: int = 1500

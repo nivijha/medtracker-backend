@@ -8,5 +8,4 @@ psycopg[binary]
 python-dateutil
 pytest
 httpx
-sentence-transformers
 redis
