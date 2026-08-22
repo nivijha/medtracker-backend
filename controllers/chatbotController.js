@@ -1,4 +1,5 @@
 import getClient from "../config/llama_chat.js";
+import { queryRag } from "../services/ragClient.js";
 import Appointment from "../models/Appointment.js";
 import Medication from "../models/Medication.js";
 import Report from "../models/Report.js";
@@ -90,7 +91,7 @@ function formatMedication(m, index) {
 
 export const chatWithAI = async (req, res) => {
   try {
-    const { messages } = req.body;
+    const { messages, ragMode = false } = req.body;
 
     if (!messages || messages.length === 0) {
       return res.json({ reply: "Hi! I'm your MedTracker assistant. How can I help you today?" });
@@ -98,6 +99,23 @@ export const chatWithAI = async (req, res) => {
 
     const userId = req.user.id;
     const userMessage = messages[messages.length - 1].content;
+
+    /* 'STEP 1A: If RAG mode, query document index' ──────────────────────── */
+    if (ragMode) {
+      try {
+        const ragResponse = await queryRag({ userId, query: userMessage });
+        return res.json({
+          response: ragResponse.answer || ragResponse.reply || "I've reviewed your documents, but couldn't generate a specific answer.",
+          sources: ragResponse.sources || [],
+          grounded: ragResponse.grounded !== false,
+          evidenceScore: ragResponse.evidenceScore || 0,
+          queryType: ragResponse.queryType || "document_query"
+        });
+      } catch (ragError) {
+        console.error("RAG_QUERY_ERROR:", ragError.message);
+        // Fall through to normal intent processing if RAG fails
+      }
+    }
 
     /* ── STEP 1: Extract intent + entities via LLaMA ── */
 
