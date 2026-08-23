@@ -116,9 +116,10 @@ class InMemoryRetrievalStore(RetrievalStore):
             out = [c for c in out if c.get("report_date") and c["report_date"] <= dt]
         return out
 
-    def _vector_rank(self, pool, query_vec) -> list[str]:
-        scored = sorted(pool, key=lambda c: _cosine(query_vec, c["embedding"]), reverse=True)
-        return [c["chunk_id"] for c in scored]
+    def _vector_scores(self, pool, query_vec) -> dict[str, float]:
+        """Absolute cosine similarity per chunk; exposed to grounding so the
+        semantic retrieval signal survives even when RRF ranks are tied."""
+        return {c["chunk_id"]: _cosine(query_vec, c["embedding"]) for c in pool}
 
     def _keyword_rank(self, pool, query) -> list[str]:
         toks = [t for t in query.lower().split() if len(t) > 2]
@@ -137,7 +138,8 @@ class InMemoryRetrievalStore(RetrievalStore):
         pool = self._apply_filters(user_id, filters)
         if not pool:
             return []
-        v_rank = self._vector_rank(pool, query_vec)
+        sims = self._vector_scores(pool, query_vec)
+        v_rank = sorted(sims, key=lambda cid: sims[cid], reverse=True)
         k_rank = self._keyword_rank(pool, query)
         fused = _rrf([v_rank, k_rank], k=settings.rrf_k)
         ordered = sorted(fused.keys(), key=lambda cid: fused[cid], reverse=True)[:top_k]
@@ -145,7 +147,9 @@ class InMemoryRetrievalStore(RetrievalStore):
         result = []
         for cid in ordered:
             c = dict(by_id[cid])
+            # "score" = fused hybrid (vector + keyword -> RRF) retrieval score.
             c["score"] = round(fused[cid], 6)
+            c["similarity"] = round(sims[cid], 6)
             result.append(c)
         return result
 
@@ -290,6 +294,9 @@ class PostgresRetrievalStore(RetrievalStore):
         with self._engine.begin() as conn:
             vres = conn.execute(vstmt).all()
         v_rank = [str(cid) for cid, _ in vres]
+        # pgvector cosine distance d = 1 - cosine similarity. Keep the absolute
+        # semantic signal per chunk (RRF ranks alone cannot express it).
+        sim_by_id = {str(cid): 1.0 - float(d) for cid, d in vres}
 
         # keyword ranking via Postgres FTS
         pts = func.plainto_tsquery("english", query)
@@ -320,7 +327,10 @@ class PostgresRetrievalStore(RetrievalStore):
         result = []
         for cid in ordered:
             c = dict(by_id[cid])
+            # "score" = fused hybrid (pgvector + FTS -> RRF) retrieval score.
             c["score"] = round(fused[cid], 6)
+            if cid in sim_by_id:
+                c["similarity"] = round(sim_by_id[cid], 6)
             result.append(c)
         return result
 
