@@ -21,6 +21,7 @@ import profileRoutes from "./routes/profileRoutes.js";
 import chatbotRoutes from "./routes/chatbotRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import errorHandler from "./middleware/errorMiddleware.js";
+import aiRoutes from "./routes/aiRoutes.js";
 
 const app = express();
 
@@ -191,6 +192,7 @@ app.use("/api/medications", medicationRoutes);
 app.use("/api/activity", activityRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/contact", contactRoutes);
+app.use("/api/ai", aiRoutes);
 
 app.use(errorHandler);
 
