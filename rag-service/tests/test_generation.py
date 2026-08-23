@@ -60,7 +60,12 @@ class _FailingGeneration(GenerationClient):
         raise RuntimeError("llm down")
 
 
-def test_generation_failure_abstains_without_fabrication():
+def test_generation_failure_preserves_evidence_without_fabrication():
+    """Generation outage must not fabricate an answer nor erase retrieval evidence.
+
+    Updated contract: evidence stands on its own; only the answer degrades.
+    grounded stays True, sources/candidates are preserved.
+    """
     client, _ = _client(generation=_FailingGeneration())
     assert _index(client, "u1", "Metformin 500 mg daily.", "d1").json()["indexed"]
     r = client.post(
@@ -69,6 +74,10 @@ def test_generation_failure_abstains_without_fabrication():
         headers={"X-Rag-Service-Secret": "test-secret", "X-User-Id": "u1"},
     )
     body = r.json()
-    assert body["grounded"] is False
-    assert body["answer"] == "Insufficient evidence was found in the available records."
-    assert body["sources"] == []
+    # Evidence was sufficient -> stays grounded.
+    assert body["grounded"] is True
+    # Never fabricates: explicit degradation message instead of LLM output.
+    assert body["answer"] == "Answer could not be generated at this time."
+    # Retrieved evidence survives the failure.
+    assert len(body["sources"]) > 0
+    assert len(body["candidates"]) > 0

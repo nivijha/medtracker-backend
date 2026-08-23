@@ -1,0 +1,17 @@
+......................F......F............                               [100%]
+================================== FAILURES ===================================
+____________ test_generation_failure_abstains_without_fabrication _____________
+tests\test_generation.py:72: in test_generation_failure_abstains_without_fabrication
+    assert body["grounded"] is False
+E   assert True is False
+------------------------------ Captured log call ------------------------------
+WARNING  rag:query.py:133 {"event": "generation_failed", "query_id": "49fafba4-a866-4f95-ae55-bc73524cb1df", "error": "llm down"}
+__________ test_generation_failure_preserves_grounding_and_evidence ___________
+tests\test_grounding.py:116: in test_generation_failure_preserves_grounding_and_evidence
+    store = InMemoryRetrievalStore()
+            ^^^^^^^^^^^^^^^^^^^^^^
+E   NameError: name 'InMemoryRetrievalStore' is not defined
+=========================== short test summary info ===========================
+FAILED tests/test_generation.py::test_generation_failure_abstains_without_fabrication
+FAILED tests/test_grounding.py::test_generation_failure_preserves_grounding_and_evidence
+2 failed, 40 passed in 14.90s

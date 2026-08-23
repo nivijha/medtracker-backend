@@ -17,21 +17,41 @@ def compute_evidence_score(candidates: list[dict]) -> float:
     """
     if not candidates:
         return 0.0
+
     best = candidates[0]
+
+    provider = getattr(settings, "embedding_provider", "local")
+
     score = best.get("rerank_score")
     if score is None:
         score = best.get("score")
     if score is None:
         return 0.0
-    # RRF fused scores are small positive numbers; map via a soft ramp so the
-    # threshold is meaningful. Re-rank scores (CrossEncoder) are larger/logistic.
+
+    if provider == "api":
+        # Production LexicalReranker score.
+        # Map token overlap count into [0, 1].
+        # 0 -> 0.0
+        # 1 -> 0.25
+        # 2 -> 0.50
+        # 3 -> 0.75
+        # 4+ -> 1.0
+        return round(min(1.0, max(0.0, float(score)) / 4.0), 4)
+
     if "rerank_score" in best:
-        # CrossEncoder scores are roughly in [-inf, inf]; sigmoid-ish clamp.
+        # Local CrossEncoderReranker produces logits.
+        # Convert logits to probability using sigmoid.
         import math
 
-        return round(1.0 / (1.0 + math.exp(-max(-10.0, min(10.0, float(score))))), 4)
-    # RRF: treat >= 1/(k+1) as strong.
-    return round(min(1.0, max(0.0, float(score) * (settings.rrf_k + 1))), 4)
+        value = float(score)
+        value = max(-10.0, min(10.0, value))
+        return round(1.0 / (1.0 + math.exp(-value)), 4)
+
+    # RRF fused score fallback.
+    return round(
+        min(1.0, max(0.0, float(score) * (settings.rrf_k + 1))),
+        4,
+    )
 
 
 def should_abstain(evidence_score: float) -> bool:

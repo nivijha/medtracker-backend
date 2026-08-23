@@ -129,24 +129,21 @@ async def query(
         try:
             user_prompt = build_user_prompt(effective_query, reranked, context=None)
             answer = generation.generate(GROUNDING_SYSTEM_PROMPT, user_prompt)
-        except Exception as e:  # generation failure -> abstain with evidence, never fabricate
+        except Exception as e:  # generation failure: evidence stands, only the answer degrades
             logger.warning(json.dumps({"event": "generation_failed", "query_id": query_id, "error": str(e)}))
-            grounded = False
-            answer = "Insufficient evidence was found in the available records."
+            answer = "Answer could not be generated at this time."
+        finally:
             gen_ms = (time.time() - t2) * 1000
-            sources = []
-        else:
-            gen_ms = (time.time() - t2) * 1000
-            sources = [
-                SourceOut(
-                    documentId=c["document_id"],
-                    sourceFilename=c.get("source_filename"),
-                    page=c.get("page"),
-                    section=c.get("section"),
-                    score=round(float(c.get("rerank_score", c.get("score", 0.0))), 4),
-                )
-                for c in reranked
-            ]
+        sources = [
+            SourceOut(
+                documentId=c["document_id"],
+                sourceFilename=c.get("source_filename"),
+                page=c.get("page"),
+                section=c.get("section"),
+                score=round(float(c.get("rerank_score", c.get("score", 0.0))), 4),
+            )
+            for c in reranked
+        ]
     else:
         gen_ms = 0.0
         answer = "Insufficient evidence was found in the available records."
