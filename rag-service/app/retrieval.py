@@ -13,6 +13,8 @@ from abc import ABC, abstractmethod
 from datetime import date
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from .config import settings
 
 
@@ -244,8 +246,11 @@ class PostgresRetrievalStore(RetrievalStore):
         if f.get("dateTo"):
             stmt = stmt.where(DocumentChunk.report_date <= date.fromisoformat(f["dateTo"]))
 
-        with self._engine.begin() as conn:
-            rows = list(conn.execute(stmt).scalars().all())
+        # Session.execute() materializes select(DocumentChunk) into ORM objects
+        # (r.chunk_id, r.document_id, ...). A raw Connection.execute() would
+        # return plain rows and .scalars() yields just the UUID primary key.
+        with Session(self._engine) as session:
+            rows = list(session.execute(stmt).scalars().all())
 
         if not rows:
             return []
