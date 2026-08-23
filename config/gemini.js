@@ -63,3 +63,39 @@ ${truncatedText}
   logger.info("GEMINI_SUMMARY_SUCCESS");
   return response.text;
 };
+
+export const generateGeminiText = async (systemPrompt, userPrompt) => {
+  if (!ai) {
+    throw new Error("GEMINI_API_KEY is missing in environment variables.");
+  }
+
+  if (!userPrompt || !userPrompt.trim()) {
+    throw new Error("No user prompt provided for generation.");
+  }
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${systemPrompt || ""}
+
+### User Query
+
+${userPrompt}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  if (!response.text) {
+    throw new Error("Gemini returned an empty response.");
+  }
+
+  logger.info("GEMINI_TEXT_GENERATION_SUCCESS");
+
+  return response.text;
+};

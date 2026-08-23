@@ -1,4 +1,4 @@
-import { getClient as getLlamaClient } from "../config/llama_chat.js";
+import getLlamaClient from "../config/llama_chat.js";
 import { generateGeminiText } from "../config/gemini.js";
 import logger from "../utils/logger.js";
 
