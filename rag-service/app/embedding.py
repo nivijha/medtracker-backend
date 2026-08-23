@@ -61,13 +61,22 @@ class HfInferenceEmbedder:
             return []
         import httpx
 
-        url = f"{self._api_url}/models/{self._model_name}"
+        url = (
+            f"{self._api_url}/models/"
+            f"{self._model_name}/pipeline/feature-extraction"
+        )
         headers = {"Authorization": f"Bearer {self._api_key}"}
         payload = {"inputs": texts, "options": {"wait_for_model": True}}
 
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
+
+            if resp.status_code >= 400:
+                raise RuntimeError(
+                    f"Hugging Face embedding API failed "
+                    f"({resp.status_code}): {resp.text}"
+                )
+
             data = resp.json()
 
         # HF feature-extraction returns list[list[float]] for pooled models.
