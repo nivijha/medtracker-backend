@@ -16,7 +16,7 @@ from ..cache import CacheStore, get_default_cache, make_cache_key
 from ..config import settings
 from ..embedding import EmbeddingProvider, get_default_embedder
 from ..generation import GenerationClient, get_default_generation_client
-from ..grounding import compute_evidence_score, should_abstain
+from ..grounding import compute_evidence_score, explain_evidence, should_abstain
 from ..prompts import GROUNDING_SYSTEM_PROMPT, build_user_prompt
 from ..rerank import Reranker, get_default_reranker
 from ..retrieval import RetrievalStore, filters_to_dict, get_default_store
@@ -121,6 +121,18 @@ async def query(
 
     evidence_score = compute_evidence_score(reranked)
     grounded = not should_abstain(evidence_score)
+
+    # Audit trail: expose every individual signal behind the grounding decision.
+    logger.info(
+        json.dumps(
+            {
+                "event": "evidence_breakdown",
+                "query_id": query_id,
+                **explain_evidence(reranked),
+                "grounded": grounded,
+            }
+        )
+    )
 
     sources: list[SourceOut] = []
     answer = ""

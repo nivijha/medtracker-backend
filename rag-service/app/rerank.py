@@ -72,8 +72,16 @@ class LexicalReranker:
     Score contract per candidate (see also app/retrieval.py::hybrid_search):
       - "score":         original fused hybrid (pgvector + FTS -> RRF) retrieval
                          score from the store. NEVER overwritten here.
-      - "lexical_score": raw token-overlap count (this reranker's own signal).
+      - "lexical_score": number of DISTINCT query content-tokens found in the
+                         chunk text. Distinctness matters: a token repeated 3x
+                         in one chunk is one piece of evidence, not three, and
+                         grounding credits only >=2 distinct matched tokens
+                         (see app/grounding.py::LEXICAL_MIN_DISTINCT).
       - "rerank_score":  the score this reranker ranks by (= lexical overlap).
+
+    Note: this is deliberately NOT synonym-aware (medicine vs medication). The
+    semantic-equivalence channel is the embedding cosine carried on the
+    candidate's "similarity" field, not lexical matching.
     """
 
     @staticmethod
@@ -92,7 +100,8 @@ class LexicalReranker:
         scored = []
         for c in candidates:
             text = (c.get("chunk_text") or "").lower()
-            s = float(sum(text.count(t) for t in toks)) if toks else 0.0
+            matched = {t for t in toks if t in text} if toks else set()
+            s = float(len(matched))
             cc = dict(c)
             cc["lexical_score"] = s
             cc["rerank_score"] = s

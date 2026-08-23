@@ -101,6 +101,27 @@ def test_lexical_reranker_preserves_retrieval_score_and_adds_lexical_score():
     assert c is not candidates[0]
 
 
+def test_lexical_reranker_counts_distinct_matched_tokens():
+    """Regression: text.count() summed every occurrence, so one token repeated
+    in a chunk inflated evidence. A token found N times is ONE match."""
+    r = LexicalReranker()
+    candidates = [
+        {
+            "chunk_id": "c1",
+            "chunk_text": "metformin metformin metformin patient patient",
+            "score": 0.01,
+        }
+    ]
+    out = r.rerank("What medication is the patient taking?", candidates, top_k=1)
+    # Distinct matched tokens = {patient}; 'metformin' occurrences are ignored
+    # (query never mentions it) and 'patient' repeats count once.
+    assert out[0]["lexical_score"] == 1.0
+    assert out[0]["rerank_score"] == 1.0
+
+    out = r.rerank("metformin dosage", candidates, top_k=1)
+    assert out[0]["lexical_score"] == 1.0
+
+
 def test_lexical_reranker_ignores_stopwords_and_punctuation():
     """'the'/'what' must not create phantom overlap; 'taking?' counts as
     'taking'."""
