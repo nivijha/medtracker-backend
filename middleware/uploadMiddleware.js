@@ -6,9 +6,6 @@ const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
     let resource_type = "auto";
-    if (file.mimetype === "application/pdf" || file.originalname.match(/\.(pdf|doc|docx)$/i)) {
-      resource_type = "raw";
-    }
     return {
       folder: "medtracker/reports",
       allowed_formats: ["jpg", "png", "pdf", "docx", "doc"],
