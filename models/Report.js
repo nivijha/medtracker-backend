@@ -24,6 +24,11 @@ const reportSchema = new mongoose.Schema(
       required: true,
     },
 
+    originalFilename: {
+      type: String,
+      trim: true,
+    },
+
     // mimeType: {
     //   type: String,
     // },

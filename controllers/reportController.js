@@ -10,6 +10,41 @@ import {
 } from "../services/summaryCacheService.js";
 
 /**
+ * Fetch a report file from Cloudinary, trying both raw/upload and image/upload
+ * URL variants. Older reports may have been stored under either resource type.
+ */
+const fetchReportFile = async (fileUrl) => {
+  const urlsToTry = [fileUrl];
+
+  if (fileUrl.includes("/raw/upload/")) {
+    urlsToTry.push(fileUrl.replace("/raw/upload/", "/image/upload/"));
+  } else if (fileUrl.includes("/image/upload/")) {
+    urlsToTry.push(fileUrl.replace("/image/upload/", "/raw/upload/"));
+  }
+
+  for (const url of urlsToTry) {
+    let pdfRes;
+    try {
+      pdfRes = await fetch(url);
+    } catch (err) {
+      logger.warn(`FETCH_REPORT_FILE: network error fetching ${url}: ${err.message}`);
+      continue;
+    }
+
+    logger.info(`FETCH_REPORT_FILE: fetched ${url} => ${pdfRes.status}`);
+
+    if (pdfRes.ok) {
+      return pdfRes;
+    }
+  }
+
+  return null;
+};
+
+const sanitizeFilename = (name) =>
+  (name || "report.pdf").replace(/[^\w.\- ]+/g, "_").replace(/"/g, "");
+
+/**
  * @desc    Upload a medical report
  * @route   POST /api/reports/upload
  * @access  Private
@@ -29,6 +64,7 @@ const uploadReport = async (req, res, next) => {
       type,
       fileUrl: req.file.path,
       cloudinaryId: req.file.filename,
+      originalFilename: req.file.originalname,
       description,
       doctorName,
       reportDate: reportDate ? new Date(reportDate) : new Date(),
@@ -141,11 +177,9 @@ const analyzeReport = async (req, res, next) => {
     }
 
     // 3. Generate once, persist to both stores
-    const pdfRes = await fetch(report.fileUrl);
-    if (!pdfRes.ok) {
-      let errorBody = "";
-      try { errorBody = await pdfRes.text(); } catch(e) {}
-      throw new Error(`Failed to fetch PDF (${report.fileUrl}). Status: ${pdfRes.status} ${pdfRes.statusText}. Body: ${errorBody}`);
+    const pdfRes = await fetchReportFile(report.fileUrl);
+    if (!pdfRes) {
+      throw new Error(`Failed to fetch PDF from any known URL variant (${report.fileUrl}).`);
     }
 
     const arrayBuffer = await pdfRes.arrayBuffer();
@@ -196,20 +230,10 @@ const streamPdf = async (req, res, next) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    let fetchUrl = report.fileUrl;
-    let pdfRes = await fetch(fetchUrl);
+    const pdfRes = await fetchReportFile(report.fileUrl);
 
-    logger.info(`STREAM_PDF: fetched ${fetchUrl} => ${pdfRes.status}`);
-
-    // Fallback: old reports used image/upload — try raw/upload instead
-    if (!pdfRes.ok && fetchUrl.includes("/image/upload/")) {
-      fetchUrl = fetchUrl.replace("/image/upload/", "/raw/upload/");
-      pdfRes = await fetch(fetchUrl);
-      logger.info(`STREAM_PDF fallback: fetched ${fetchUrl} => ${pdfRes.status}`);
-    }
-
-    if (!pdfRes.ok) {
-      logger.warn(`STREAM_PDF: could not fetch PDF, status=${pdfRes.status}, url=${fetchUrl}`);
+    if (!pdfRes) {
+      logger.warn(`STREAM_PDF: could not fetch PDF from any URL variant, url=${report.fileUrl}`);
       return res.status(422).json({
         message: "This report cannot be previewed. It may have been uploaded in an older format.",
         cannotPreview: true,
@@ -227,4 +251,45 @@ const streamPdf = async (req, res, next) => {
   }
 };
 
-export { uploadReport, getMyReports, deleteReport, analyzeReport, streamPdf };
+/**
+ * @desc    Download a PDF report file with Content-Disposition: attachment
+ * @route   GET /api/reports/:id/download
+ * @access  Private
+ */
+const downloadReport = async (req, res, next) => {
+  try {
+    const report = await Report.findById(req.params.id);
+
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+
+    if (report.user.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const pdfRes = await fetchReportFile(report.fileUrl);
+
+    if (!pdfRes) {
+      logger.warn(`DOWNLOAD_REPORT: could not fetch file from any URL variant, url=${report.fileUrl}`);
+      return res.status(422).json({
+        message: "This report cannot be downloaded. It may have been uploaded in an older format.",
+        cannotDownload: true,
+      });
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${sanitizeFilename(report.originalFilename)}"`
+    );
+
+    const arrayBuffer = await pdfRes.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (error) {
+    logger.error("REPORT_DOWNLOAD_CRASH: " + (error.stack || error.message));
+    next(error);
+  }
+};
+
+export { uploadReport, getMyReports, deleteReport, analyzeReport, streamPdf, downloadReport };

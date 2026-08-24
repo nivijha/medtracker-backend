@@ -5,6 +5,7 @@ import {
   deleteReport,
   analyzeReport,
   streamPdf,
+  downloadReport,
 } from "../controllers/reportController.js";
 import protect from "../middleware/authMiddleware.js";
 import upload from "../middleware/uploadMiddleware.js";
@@ -50,5 +51,12 @@ router.get("/:id/analyze", protect, analyzeReport);
  * @access  Private
  */
 router.get("/:id/pdf", protect, streamPdf);
+
+/**
+ * @route   GET /api/reports/:id/download
+ * @desc    Download a report file with Content-Disposition: attachment (original filename)
+ * @access  Private
+ */
+router.get("/:id/download", protect, downloadReport);
 
 export default router;
