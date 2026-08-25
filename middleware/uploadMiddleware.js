@@ -5,19 +5,25 @@ import cloudinary from "../config/cloudinary.js";
 const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
-    let resource_type = "auto";
-    return {
+    const isOfficeDoc =
+      /\.(docx?)$/i.test(file.originalname) ||
+      /msword|officedocument/i.test(file.mimetype);
+    const resource_type = isOfficeDoc ? "raw" : "image";
+    const params = {
       folder: "medtracker/reports",
-      allowed_formats: ["jpg", "png", "pdf", "docx", "doc"],
-      resource_type: resource_type,
+      resource_type,
     };
+    if (resource_type !== "raw") {
+      params.allowed_formats = ["jpg", "jpeg", "png", "webp", "pdf"];
+    }
+    return params;
   },
 });
 
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 10 * 1024 * 1024,
   },
 });
 

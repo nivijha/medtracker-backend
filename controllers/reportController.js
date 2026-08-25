@@ -3,6 +3,7 @@ import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
 import { generateReportSummary } from "../services/reportSummaryService.js";
 import { extractTextFromPdf, isPdfBuffer } from "../services/pdfExtractionService.js";
+import { extractReportDateFromBuffer } from "../services/reportMetaExtractionService.js";
 import {
   getSummaryFromRedis,
   setSummaryInRedis,
@@ -51,7 +52,7 @@ const sanitizeFilename = (name) =>
  */
 const uploadReport = async (req, res, next) => {
   try {
-    const { type, description, doctorName, reportDate } = req.body;
+    const { type, description, doctorName, title } = req.body;
 
     if (!type || !req.file) {
       return res.status(400).json({
@@ -59,15 +60,36 @@ const uploadReport = async (req, res, next) => {
       });
     }
 
+    let reportTitle = (title || "").trim() || null;
+    let reportDescription = (description || "").trim() || null;
+    if (!reportTitle && reportDescription && reportDescription.includes(":::")) {
+      const idx = reportDescription.indexOf(":::");
+      reportTitle = reportDescription.slice(0, idx).trim() || null;
+      reportDescription = reportDescription.slice(idx + 3).trim() || null;
+    }
+
+    let reportDate = new Date();
+    try {
+      const pdfRes = await fetch(req.file.path);
+      if (pdfRes.ok) {
+        const buf = Buffer.from(await pdfRes.arrayBuffer());
+        const extracted = await extractReportDateFromBuffer(buf);
+        if (extracted) reportDate = extracted;
+      }
+    } catch (err) {
+      logger.warn(`REPORT_DATE_EXTRACT_WARN: ${err.message}`);
+    }
+
     const report = await Report.create({
       user: req.user.id,
       type,
+      title: reportTitle,
       fileUrl: req.file.path,
       cloudinaryId: req.file.filename,
       originalFilename: req.file.originalname,
-      description,
-      doctorName,
-      reportDate: reportDate ? new Date(reportDate) : new Date(),
+      description: reportDescription,
+      doctorName: doctorName ? doctorName.trim() : undefined,
+      reportDate,
     });
 
     res.status(201).json({
@@ -130,9 +152,14 @@ const deleteReport = async (req, res, next) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // DELETE FROM CLOUDINARY
     if (report.cloudinaryId) {
-      await cloudinary.uploader.destroy(report.cloudinaryId);
+      const isRaw = report.fileUrl && report.fileUrl.includes("/raw/upload/");
+      const opts = isRaw ? { resource_type: "raw" } : report.fileUrl && report.fileUrl.includes("/image/upload/") ? { resource_type: "image" } : {};
+      try {
+        await cloudinary.uploader.destroy(report.cloudinaryId, opts);
+      } catch (err) {
+        logger.warn(`CLOUDINARY_DESTROY_WARN: ${err.message}`);
+      }
     }
 
     // DELETE FROM DB

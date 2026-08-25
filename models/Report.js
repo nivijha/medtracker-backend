@@ -24,14 +24,15 @@ const reportSchema = new mongoose.Schema(
       required: true,
     },
 
-    originalFilename: {
+    title: {
       type: String,
       trim: true,
     },
 
-    // mimeType: {
-    //   type: String,
-    // },
+    originalFilename: {
+      type: String,
+      trim: true,
+    },
 
     description: {
       type: String,
