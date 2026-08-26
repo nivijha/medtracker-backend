@@ -203,29 +203,47 @@ const analyzeReport = async (req, res, next) => {
       return res.json({ summary: report.summary, cached: true });
     }
 
-    // 3. Generate once, persist to both stores
     const pdfRes = await fetchReportFile(report.fileUrl);
     if (!pdfRes) {
-      throw new Error(`Failed to fetch PDF from any known URL variant (${report.fileUrl}).`);
+      logger.warn(`ANALYZE_REPORT: could not fetch PDF from any URL variant, url=${report.fileUrl}`);
+      return res.status(422).json({
+        message: "This report cannot be analyzed. It may have been uploaded in an older format or the file is no longer available.",
+        cannotAnalyze: true,
+      });
     }
 
-    const arrayBuffer = await pdfRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    let buffer;
+    try {
+      const arrayBuffer = await pdfRes.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+    } catch (err) {
+      logger.error(`ANALYZE_REPORT: failed to read PDF buffer: ${err.message}`);
+      return res.status(502).json({ message: "Failed to read the report file. Please try again.", cannotAnalyze: true });
+    }
 
-    // Verify it's actually a PDF using the magic string %PDF
     if (!isPdfBuffer(buffer)) {
       return res.status(400).json({ message: "The selected file is not a valid PDF document and cannot be analyzed." });
     }
 
-    // Parse text from the PDF Buffer
-    const pdfText = await extractTextFromPdf(buffer);
+    let pdfText;
+    try {
+      pdfText = await extractTextFromPdf(buffer);
+    } catch (err) {
+      logger.error(`ANALYZE_REPORT: pdf extraction failed: ${err.message}`);
+      return res.status(422).json({ message: "Could not extract text from this PDF. It may be a scanned image or corrupted file.", cannotAnalyze: true });
+    }
 
     if (!pdfText || pdfText.trim().length === 0) {
       return res.status(400).json({ message: "Could not extract any readable text from this PDF." });
     }
 
-    // Pass text to the AI summary service (LLaMA with Gemini fallback)
-    const summary = await generateReportSummary(pdfText);
+    let summary;
+    try {
+      summary = await generateReportSummary(pdfText);
+    } catch (err) {
+      logger.error(`ANALYZE_REPORT: summary generation failed: ${err.message}`);
+      return res.status(502).json({ message: "AI summary service is temporarily unavailable. Please try again in a moment.", cannotAnalyze: true });
+    }
 
     report.summary = summary;
     report.summaryGeneratedAt = new Date();
