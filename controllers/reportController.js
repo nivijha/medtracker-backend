@@ -92,6 +92,10 @@ const uploadReport = async (req, res, next) => {
       reportDate,
     });
 
+    import("../controllers/ragController.js")
+      .then(({ indexReportById }) => indexReportById(report._id, req.user.id))
+      .catch((err) => logger.warn(`RAG_AUTO_INDEX_WARN: ${err.message}`));
+
     res.status(201).json({
       message: "Report uploaded successfully",
       report,

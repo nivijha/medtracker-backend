@@ -64,10 +64,14 @@ app.use(helmet({
 app.use(morgan("combined", { stream: { write: (message) => logger.info(message.trim()) } }));
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 100, 
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX || "100", 10),
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    const secret = process.env.RAG_SERVICE_SECRET;
+    return !!(secret && req.headers["x-rag-service-secret"] === secret);
+  },
 });
 app.use(limiter);
 
