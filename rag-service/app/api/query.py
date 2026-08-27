@@ -109,7 +109,7 @@ async def query(
         user_id=verified_user_id,
         query=effective_query,
         query_vec=query_vec,
-        top_k=settings.top_k * 3,
+        top_k=settings.rerank_top_n,
         filters=filters_to_dict(req.filters),
     )
     retrieval_ms = (time.time() - t0) * 1000

@@ -1,23 +1,17 @@
-"""Reranking: interface + CrossEncoder (local) + lexical fallback (production/tests/offline).
-
-Reranking runs ONLY over the small hybrid candidate set (top-N), keeping latency
-bounded. The CrossEncoder model is imported lazily so unit tests/offline mode
-don't pay the load cost.
-"""
 from __future__ import annotations
 
+import json
+import logging
 import string
 from typing import Protocol
+
+logger = logging.getLogger("rag")
 
 
 class Reranker(Protocol):
     def rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]: ...
 
 
-# Generic English function words + interrogatives. Dropped before lexical
-# overlap so queries like "What is the patient's insurance provider?" do not
-# accumulate phantom overlap from stopwords such as "the". Deliberately EXCLUDES
-# negations ("no", "not", "nor", "never") because they change clinical meaning.
 _STOPWORDS = frozenset(
     {
         "a", "an", "the", "and", "or", "but", "so", "because",
@@ -55,7 +49,6 @@ class CrossEncoderReranker:
         scores = self._ensure().predict(pairs)
         scored = []
         for c, s in zip(candidates, scores):
-            # Build scored copies; never mutate the caller's candidate dicts.
             cc = dict(c)
             cc["rerank_score"] = float(s)
             scored.append(cc)
@@ -64,32 +57,10 @@ class CrossEncoderReranker:
 
 
 class LexicalReranker:
-    """Deterministic reranker: lexical overlap between query and chunk text.
-
-    Used as a testable/offline fallback and as the production reranker when
-    external embedding API is used (no local ML models).
-
-    Score contract per candidate (see also app/retrieval.py::hybrid_search):
-      - "score":         original fused hybrid (pgvector + FTS -> RRF) retrieval
-                         score from the store. NEVER overwritten here.
-      - "lexical_score": number of DISTINCT query content-tokens found in the
-                         chunk text. Distinctness matters: a token repeated 3x
-                         in one chunk is one piece of evidence, not three, and
-                         grounding credits only >=2 distinct matched tokens
-                         (see app/grounding.py::LEXICAL_MIN_DISTINCT).
-      - "rerank_score":  the score this reranker ranks by (= lexical overlap).
-
-    Note: this is deliberately NOT synonym-aware (medicine vs medication). The
-    semantic-equivalence channel is the embedding cosine carried on the
-    candidate's "similarity" field, not lexical matching.
-    """
-
     @staticmethod
     def _tokenize(text: str) -> list[str]:
         toks = []
         for raw in text.lower().split():
-            # Strip surrounding punctuation ("taking?" -> "taking") but keep
-            # intra-word apostrophes ("patient's" stays distinct from "patient").
             tok = raw.strip(string.punctuation)
             if len(tok) > 2 and tok not in _STOPWORDS:
                 toks.append(tok)
@@ -110,12 +81,99 @@ class LexicalReranker:
         return ranked[:top_k]
 
 
+class OpenRouterReranker:
+    def __init__(self, api_key: str, model: str, api_url: str = "https://openrouter.ai/api/v1") -> None:
+        self._api_key = api_key
+        self._model = model
+        self._api_url = api_url.rstrip("/")
+        self._fallback = LexicalReranker()
+
+    def _fallback_rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+        return self._fallback.rerank(query, candidates, top_k)
+
+    def rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+        if not candidates:
+            return []
+        if not self._api_key:
+            logger.warning(json.dumps({"event": "openrouter_rerank_no_key", "fallback": "lexical"}))
+            return self._fallback_rerank(query, candidates, top_k)
+
+        numbered = "\n\n".join(f"[{i}] {c.get('chunk_text', '')[:2000]}" for i, c in enumerate(candidates, 1))
+        prompt = (
+            "Score each chunk's relevance to the query on a 0.0-1.0 scale.\n"
+            f"Query: {query}\n\n"
+            f"Chunks:\n{numbered}\n\n"
+            'Return ONLY JSON object mapping 1-based index to score, e.g. {"1": 0.9, "2": 0.1}.'
+        )
+
+        try:
+            import httpx
+
+            url = f"{self._api_url}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            }
+            body = {
+                "model": self._model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0,
+                "response_format": {"type": "json_object"},
+            }
+            with httpx.Client(timeout=20.0) as client:
+                resp = client.post(url, headers=headers, json=body)
+                if resp.status_code >= 400:
+                    raise RuntimeError(f"OpenRouter rerank failed ({resp.status_code}): {resp.text[:500]}")
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"]
+                scores_map = json.loads(content) if isinstance(content, str) else content
+        except Exception as e:
+            logger.warning(json.dumps({"event": "openrouter_rerank_failed", "error": str(e)[:500], "fallback": "lexical"}))
+            return self._fallback_rerank(query, candidates, top_k)
+
+        try:
+            parsed: dict[int, float] = {}
+            for k, v in scores_map.items():
+                try:
+                    idx = int(str(k).strip())
+                    parsed[idx] = max(0.0, min(1.0, float(v)))
+                except (ValueError, TypeError):
+                    continue
+        except Exception:
+            logger.warning(json.dumps({"event": "openrouter_rerank_parse_failed", "fallback": "lexical"}))
+            return self._fallback_rerank(query, candidates, top_k)
+
+        scored = []
+        for i, c in enumerate(candidates, 1):
+            cc = dict(c)
+            raw = parsed.get(i)
+            if raw is not None:
+                cc["rerank_score"] = float(raw)
+                cc["rerank_source"] = "openrouter"
+            elif "similarity" in c:
+                cc["rerank_score"] = max(0.0, min(1.0, float(c["similarity"])))
+                cc["rerank_source"] = "openrouter"
+            else:
+                cc["rerank_score"] = 0.0
+                cc["rerank_source"] = "openrouter"
+            if "lexical_score" not in cc:
+                cc["lexical_score"] = 0.0
+            scored.append(cc)
+
+        ranked = sorted(scored, key=lambda c: c.get("rerank_score", 0.0), reverse=True)
+        return ranked[:top_k]
+
+
 def get_default_reranker(model_name: str | None = None) -> Reranker:
     from .config import settings
 
     provider = getattr(settings, "embedding_provider", "local")
     if provider == "api":
-        # Production: no local ML models, use lightweight lexical reranker
+        if getattr(settings, "openrouter_api_key", ""):
+            return OpenRouterReranker(
+                api_key=settings.openrouter_api_key,
+                model=getattr(settings, "openrouter_model", "openai/gpt-4o-mini"),
+                api_url=getattr(settings, "openrouter_api_url", "https://openrouter.ai/api/v1"),
+            )
         return LexicalReranker()
-    # Local development / tests
-    return CrossEncoderReranker(model_name or "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    return CrossEncoderReranker(model_name or settings.reranker_model)

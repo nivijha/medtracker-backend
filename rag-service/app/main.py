@@ -12,7 +12,9 @@ from .generation import GenerationClient, get_default_generation_client
 from .rerank import Reranker, get_default_reranker
 from .retrieval import RetrievalStore, get_default_store
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+from .config import settings as _settings
+
+logging.basicConfig(level=getattr(logging, _settings.log_level.upper(), logging.INFO), format="%(message)s")
 
 app = FastAPI(title="MedTracker RAG Service", version="0.2.0")
 
