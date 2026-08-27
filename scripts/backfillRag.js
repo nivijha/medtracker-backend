@@ -1,11 +1,3 @@
-/* Backfill RAG index from existing MongoDB reports.
- *
- * For every Report in MongoDB, fetch its PDF from Cloudinary, extract text, and
- * (re)index it into the FastAPI RAG service. Idempotent by documentId.
- *
- * Usage: node scripts/backfillRag.js
- * Requires: MONGO_URI, RAG_SERVICE_URL, RAG_SERVICE_SECRET (via .env)
- */
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -17,6 +9,22 @@ import logger from "../utils/logger.js";
 
 const BATCH = 25;
 
+async function fetchReportFileDual(fileUrl) {
+  const urlsToTry = [fileUrl];
+  if (fileUrl.includes("/raw/upload/")) {
+    urlsToTry.push(fileUrl.replace("/raw/upload/", "/image/upload/"));
+  } else if (fileUrl.includes("/image/upload/")) {
+    urlsToTry.push(fileUrl.replace("/image/upload/", "/raw/upload/"));
+  }
+  for (const url of urlsToTry) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res;
+    } catch (_) {}
+  }
+  return null;
+}
+
 async function run() {
   await connectDB();
   const cursor = Report.find({}).cursor();
@@ -26,11 +34,16 @@ async function run() {
 
   for (let report = await cursor.next(); report != null; report = await cursor.next()) {
     processed += 1;
+    if (!report.user || !report.fileUrl) {
+      failed += 1;
+      logger.warn(`BACKFILL_SKIP ${report._id}: missing user or fileUrl`);
+      continue;
+    }
     try {
-      const pdfRes = await fetch(report.fileUrl);
-      if (!pdfRes.ok) {
+      const pdfRes = await fetchReportFileDual(report.fileUrl);
+      if (!pdfRes) {
         failed += 1;
-        logger.warn(`BACKFILL_SKIP ${report._id}: PDF fetch ${pdfRes.status}`);
+        logger.warn(`BACKFILL_SKIP ${report._id}: PDF fetch 404 on all variants`);
         continue;
       }
       const buffer = Buffer.from(await pdfRes.arrayBuffer());
