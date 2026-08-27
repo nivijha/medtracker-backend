@@ -39,16 +39,22 @@ Response schema (return exactly this shape):
 }`;
 
 async function llamaChat(systemPrompt, userMessage) {
-  const completion = await getClient().chat.completions.create({
-    model: "meta/llama-3.1-70b-instruct",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ],
-    temperature: 0.2,
-    max_tokens: 600,
-  });
-  return completion.choices[0].message.content.trim();
+  try {
+    const completion = await getClient().chat.completions.create({
+      model: "meta/llama-3.3-70b-instruct",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      temperature: 0.2,
+      max_tokens: 600,
+    });
+    return completion.choices[0].message.content.trim();
+  } catch (error) {
+    logger.warn(`LLAMA_CHAT_FAILED: ${error.message}; falling back to Gemini.`);
+    const { generateGeminiText } = await import("../config/gemini.js");
+    return generateGeminiText(systemPrompt, userMessage);
+  }
 }
 
 function formatAppointment(a, index) {
