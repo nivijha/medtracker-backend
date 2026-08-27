@@ -26,7 +26,7 @@ async function ragPost(path, body, userId) {
     return { ok: false, skipped: "RAG_SERVICE_URL not configured" };
   }
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), RAG_TIMEOUT_MS);
     try {
@@ -54,11 +54,11 @@ async function ragPost(path, body, userId) {
     } catch (err) {
       const isAbort = err.name === "AbortError";
       const status = err.status;
-      const shouldRetry = attempt === 0 && (isAbort || (status && isRetryableStatus(status)));
+      const shouldRetry = attempt < 2 && (isAbort || (status && isRetryableStatus(status)));
 
       if (isAbort) {
         if (shouldRetry) {
-          logger.warn(`RAG ${path} timed out (attempt ${attempt + 1}/2), retrying in ${RAG_RETRY_DELAY_MS}ms`);
+          logger.warn(`RAG ${path} timed out (attempt ${attempt + 1}/3), retrying in ${RAG_RETRY_DELAY_MS}ms`);
           clearTimeout(timer);
           await new Promise((r) => setTimeout(r, RAG_RETRY_DELAY_MS));
           continue;
@@ -68,7 +68,7 @@ async function ragPost(path, body, userId) {
 
       if (shouldRetry) {
         const delayMs = parseRetryAfterMs(err.retryAfter) ?? RAG_RETRY_DELAY_MS;
-        logger.warn(`RAG ${path} responded ${status} (attempt ${attempt + 1}/2), retrying in ${delayMs}ms`);
+        logger.warn(`RAG ${path} responded ${status} (attempt ${attempt + 1}/3), retrying in ${delayMs}ms`);
         clearTimeout(timer);
         await new Promise((r) => setTimeout(r, delayMs));
         continue;
