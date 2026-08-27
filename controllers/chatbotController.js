@@ -39,7 +39,11 @@ Response schema (return exactly this shape):
 }`;
 
 async function llamaChat(systemPrompt, userMessage) {
+  const { generateGeminiText } = await import("../config/gemini.js");
   try {
+    return await generateGeminiText(systemPrompt, userMessage);
+  } catch (error) {
+    logger.warn(`GEMINI_CHAT_FAILED: ${error.message}; trying NVIDIA fallback.`);
     const completion = await getClient().chat.completions.create({
       model: "meta/llama-3.3-70b-instruct",
       messages: [
@@ -50,10 +54,6 @@ async function llamaChat(systemPrompt, userMessage) {
       max_tokens: 600,
     });
     return completion.choices[0].message.content.trim();
-  } catch (error) {
-    logger.warn(`LLAMA_CHAT_FAILED: ${error.message}; falling back to Gemini.`);
-    const { generateGeminiText } = await import("../config/gemini.js");
-    return generateGeminiText(systemPrompt, userMessage);
   }
 }
 

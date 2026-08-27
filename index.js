@@ -207,6 +207,18 @@ if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () =>
     logger.info(`Server running on port ${PORT}`)
   );
+
+  if (process.env.RAG_SERVICE_URL) {
+    const RAG_KEEPALIVE_MS = 10 * 60 * 1000;
+    setInterval(async () => {
+      try {
+        await fetch(`${process.env.RAG_SERVICE_URL}/rag/health`, {
+          headers: { "X-Rag-Service-Secret": process.env.RAG_SERVICE_SECRET || "" },
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch (_) {}
+    }, RAG_KEEPALIVE_MS);
+  }
 }
 
 export default app;

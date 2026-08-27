@@ -3,7 +3,7 @@ import logger from "../utils/logger.js";
 const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL;
 const RAG_SERVICE_SECRET = process.env.RAG_SERVICE_SECRET || "";
 const RAG_TIMEOUT_MS = 50000;
-const RAG_RETRY_DELAY_MS = 2000;
+const RAG_RETRY_DELAY_MS = parseInt(process.env.RAG_RETRY_DELAY_MS || "8000", 10);
 
 function parseRetryAfterMs(headerValue) {
   if (!headerValue) return null;
