@@ -1,9 +1,3 @@
-"""Generation client: interface + Express-backed implementation + mock.
-
-FastAPI delegates grounded generation to the existing Express endpoint
-POST /api/ai/generate (which reuses the LLaMA -> Gemini fallback). This keeps the
-single source of truth for generation in Node and only adds a thin HTTP client here.
-"""
 from __future__ import annotations
 
 from typing import Protocol
@@ -14,17 +8,22 @@ class GenerationClient(Protocol):
 
 
 class ExpressGenerationClient:
-    def __init__(self, base_url: str, secret: str, timeout_s: float = 20.0) -> None:
-        self._base_url = base_url.rstrip("/")
+    def __init__(self, base_url: str, secret: str, timeout_s: float = 25.0) -> None:
+        raw = base_url.rstrip("/")
+        if raw.endswith("/api/ai/generate"):
+            raw = raw[: -len("/api/ai/generate")]
+        elif raw.endswith("/api/ai"):
+            raw = raw[: -len("/api/ai")]
+        self._base_url = raw.rstrip("/")
         self._secret = secret
         self._timeout_s = timeout_s
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         import json
 
-        # Lazy import so the module is importable without `requests`/http libs in tests.
         try:
             import urllib.request
+            import urllib.error
 
             req = urllib.request.Request(
                 f"{self._base_url}/api/ai/generate",
@@ -32,13 +31,19 @@ class ExpressGenerationClient:
                 headers={"Content-Type": "application/json", "X-Rag-Service-Secret": self._secret},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=self._timeout_s) as resp:
-                payload = json.loads(resp.read().decode())
-            text = payload.get("text")
-            if not text:
-                raise RuntimeError("Empty generation response")
-            return text
-        except Exception as e:  # network/HTTP failures surface to caller for abstention
+            try:
+                with urllib.request.urlopen(req, timeout=self._timeout_s) as resp:
+                    payload = json.loads(resp.read().decode())
+            except urllib.error.HTTPError as he:
+                body = he.read().decode()[:800] if he.fp else ""
+                raise RuntimeError(f"Express generation HTTP {he.code}: {body}") from he
+            text = payload.get("text") or payload.get("reply") or payload.get("answer")
+            if not text or not str(text).strip():
+                raise RuntimeError(f"Empty generation response: {str(payload)[:800]}")
+            return str(text).strip()
+        except RuntimeError:
+            raise
+        except Exception as e:
             raise RuntimeError(f"generation request failed: {e}") from e
 
 

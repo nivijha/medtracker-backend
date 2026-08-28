@@ -12,6 +12,11 @@ from datetime import date
 from typing import Any
 
 
+_NOISE_SECTION_RE = re.compile(
+    r"^\s*(\[:.*|.*IMPORTANT INSTRUCTIONS.*|.*LPL[-\s].*LAB.*|.*DMC\s*-\s*\d+.*|.*Test conducted.*|.*Page\s*\d+.*)\s*$",
+    re.IGNORECASE,
+)
+
 _SECTION_RE = re.compile(r"^\s*(?:[A-Z][A-Z0-9 /&()\-]{3,}|[0-9]+[\.\)]\s+[A-Z][A-Za-z ]{2,})\s*[:\-\.]?\s*$", re.MULTILINE)
 
 
@@ -24,8 +29,11 @@ def _split_paragraphs(text: str) -> list[str]:
 
 
 def _is_heading(line: str) -> bool:
-    # Single-line heading detection (no embedded newline).
-    return "\n" not in line and bool(_SECTION_RE.match(line)) and len(line.strip()) < 80
+    if "\n" in line or len(line.strip()) >= 80:
+        return False
+    if _NOISE_SECTION_RE.match(line):
+        return False
+    return bool(_SECTION_RE.match(line))
 
 
 def chunk_text(

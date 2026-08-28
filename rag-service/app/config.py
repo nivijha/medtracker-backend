@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     rag_service_secret: str = ""
-    express_ai_url: str = "http://localhost:5000/api/ai/generate"
+    express_ai_url: str = "http://localhost:5000"
     database_url: str = ""
     pg_rag_database_url: str = ""
     redis_url: str = ""
