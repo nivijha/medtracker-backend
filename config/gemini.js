@@ -8,23 +8,31 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
 const EXTRACTION_PROMPT = `### Role
-You are a Medical Data Extraction Specialist. Your task is to analyze the attached PDF medical record and create a concise, one-page summary for emergency use.
+You are a Medical Data Extraction Specialist. Analyze the attached PDF medical record and create a structured, highly valuable clinical summary.
 
-### Objective
-Extract the following five data points with absolute accuracy. If the information is not explicitly stated in the document, mark it as "Not Specified."
+### A) Patient Emergency Card (5 fields)
+Extract with absolute accuracy. If not explicitly stated, mark "Not Specified."
+1. **Blood Group:** ABO and Rh factor (e.g., O positive)
+2. **Allergies:** drug/food/environmental + reaction if noted
+3. **Chronic Conditions:** ongoing issues (e.g., Diabetes Type 2, Hypertension)
+4. **Current Medications:** names, dosages, frequency if available
+5. **Emergency Contact:** name, relationship, phone
 
-### Extraction Fields
-1. **Blood Group:** Identify ABO and Rh factor (e.g., O positive).
-2. **Allergies:** List all known drug, food, or environmental allergies. Include the reaction if noted.
-3. **Chronic Conditions:** List ongoing medical issues (e.g., Diabetes Type 2, Hypertension, Asthma).
-4. **Current Medications:** List names of drugs, dosages, and frequency if available.
-5. **Emergency Contact:** Extract the name, relationship, and phone number of the primary contact.
+### B) Clinical Summary (detailed — this is shown to the user)
+Produce the following sections in order:
+1. **Document Type & Date:** type (e.g., CBC Blood Test, Chest X-Ray) + all timestamps (collection / reported) when printed
+2. **Key Findings / Parameters:** EVERY measured value with unit, Bio. Ref. Interval, and flag (High/Low/Borderline/Within range) when printed
+3. **What This Means (plain English, 1-2 lines per abnormal):** plain-language note per flagged value — what the interval implies; do NOT diagnose or prescribe
+4. **Impressions / Diagnosis:** doctor/radiologist conclusion — quote impression lines verbatim when present
+5. **Patient Context:** demographics, history, vitals mentioned
+6. **Action Items:** follow-ups, medications, lifestyle changes — quote when possible
 
 ### Constraints
-- **Accuracy First:** Do not infer or guess information. Only extract what is written.
-- **Formatting:** Use a clean, bulleted list format.
-- **Privacy:** Do not include full social security numbers or sensitive notes unrelated to these five categories.
-- **Conflict Resolution:** If the document contains conflicting information, note both and flag it as a "Conflict."
+- Do NOT make up medical information. Only use the provided text.
+- Be concise but clinically precise.
+- DO NOT use emojis or decorative symbols.
+- Use a markdown bullet (\`- \`) for EVERY listed item; leave a blank line after each heading.
+- If not a medical report, state: "This document does not appear to contain standard medical report data."
 
 ### Output Format
 # Patient Medical Summary
@@ -33,7 +41,25 @@ Extract the following five data points with absolute accuracy. If the informatio
 **Allergies:** [List or None]
 **Chronic Conditions:** [List or None]
 **Current Medications:** [List or None]
-**Emergency Contact:** [Name - Relationship - Phone]`;
+**Emergency Contact:** [Name - Relationship - Phone]
+
+**Document Type & Date:**
+- [Type & Date with collection/reported times]
+
+**Key Findings / Abnormalities:**
+- [Finding — value, unit, ref interval, flag]
+
+**What This Means:**
+- [Per-abnormal plain-English note]
+
+**Impressions / Diagnosis:**
+- [Conclusion]
+
+**Patient Context:**
+- [Conditions/Vitals]
+
+**Action Items:**
+- [Recommendation]`;
 
 export const generateGeminiSummary = async (documentText) => {
   if (!ai) {
