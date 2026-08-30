@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 
@@ -134,6 +135,27 @@ async def query(
         )
     )
 
+    _NOISE_RE = re.compile(
+        r"^(\[:|LPL[-\s].*LAB|DMC\s*-\s*\d+|IMPORTANT INSTRUCTIONS|CGHS|Test conducted|Page\s*\d+)", re.IGNORECASE
+    )
+
+    def _is_noisy(c: dict) -> bool:
+        sec = (c.get("section") or "").strip()
+        txt = (c.get("chunk_text") or "").strip()
+        if sec and _NOISE_RE.match(sec):
+            return True
+        if txt and _NOISE_RE.match(txt) and len(txt) < 120:
+            return True
+        return False
+
+    noisy_count = sum(1 for c in reranked if _is_noisy(c))
+    clean_reranked = [c for c in reranked if not _is_noisy(c)]
+    if noisy_count > 0 and len(clean_reranked) >= 2:
+        reranked = clean_reranked
+        evidence_score = compute_evidence_score(reranked)
+        grounded = not should_abstain(evidence_score)
+        logger.info(json.dumps({"event": "noise_filter", "query_id": query_id, "removed": noisy_count, "kept": len(clean_reranked), "evidence_score": evidence_score, "grounded": grounded}))
+
     sources: list[SourceOut] = []
     answer = ""
     if grounded:
@@ -141,7 +163,7 @@ async def query(
         try:
             user_prompt = build_user_prompt(effective_query, reranked, context=None)
             answer = generation.generate(GROUNDING_SYSTEM_PROMPT, user_prompt)
-        except Exception as e:  # generation failure: evidence stands, only the answer degrades
+        except Exception as e:
             logger.warning(json.dumps({"event": "generation_failed", "query_id": query_id, "error": str(e)}))
             answer = "Answer could not be generated at this time."
         finally:
