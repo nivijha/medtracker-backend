@@ -22,6 +22,7 @@ import chatbotRoutes from "./routes/chatbotRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import errorHandler from "./middleware/errorMiddleware.js";
 import aiRoutes from "./routes/aiRoutes.js";
+import ragAdminRoutes from "./routes/ragAdminRoutes.js";
 
 const app = express();
 
@@ -197,6 +198,7 @@ app.use("/api/activity", activityRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/rag/admin", ragAdminRoutes);
 
 app.use(errorHandler);
 
