@@ -4,6 +4,11 @@ import { indexDocument } from "../services/ragClient.js";
 import logger from "../utils/logger.js";
 
 const NOISE_RE = /^(\[:|LPL[-\s].*LAB|DMC\s*-\s*\d+|IMPORTANT INSTRUCTIONS|CGHS|Test conducted|Page\s*\d+)/i;
+const REINDEX_PAUSE_MS = 2000;
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 async function fetchReportFileDual(fileUrl) {
   const urlsToTry = [fileUrl];
@@ -68,6 +73,8 @@ export const reindexNoisy = async (req, res, next) => {
         failed += 1;
         logger.warn(`REINDEX_ERROR ${report._id}: ${err.message}`);
       }
+
+      await sleep(REINDEX_PAUSE_MS);
     }
 
     logger.info(`REINDEX done: scanned=${scanned} candidates=${candidates} reindexed=${reindexed} failed=${failed} dryRun=${dryRun}`);

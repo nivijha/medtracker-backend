@@ -105,14 +105,22 @@ async def query(
 
     t0 = time.time()
 
-    query_vec = embedder.embed([effective_query])[0]
-    candidates = store.hybrid_search(
-        user_id=verified_user_id,
-        query=effective_query,
-        query_vec=query_vec,
-        top_k=settings.rerank_top_n,
-        filters=filters_to_dict(req.filters),
-    )
+    try:
+        query_vec = embedder.embed([effective_query])[0]
+        candidates = store.hybrid_search(
+            user_id=verified_user_id,
+            query=effective_query,
+            query_vec=query_vec,
+            top_k=settings.rerank_top_n,
+            filters=filters_to_dict(req.filters),
+        )
+    except Exception as e:
+        msg = str(e).lower()
+        is_transient = any(k in msg for k in ("429", "too many", "timeout", "timed out", "connection", "503", "502", "504"))
+        if is_transient or "hugging face" in msg or "embedding" in msg:
+            logger.warning(json.dumps({"event": "rag_unavailable", "query_id": query_id, "error": str(e)[:500]}))
+            raise HTTPException(status_code=503, detail={"message": "RAG temporarily unavailable", "rag_available": False})
+        raise
     retrieval_ms = (time.time() - t0) * 1000
 
     # Rerank the candidate set (bounded to top-N for latency).

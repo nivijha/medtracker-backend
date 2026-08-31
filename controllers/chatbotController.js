@@ -115,11 +115,17 @@ export const chatWithAI = async (req, res) => {
         });
       } catch (ragError) {
         logger.error(`RAG_QUERY_ERROR: ${ragError.message}`);
+        const isUnavailable = ragError.ragUnavailable || /temporarily unavailable|503|429/i.test(ragError.message);
+        const msg = isUnavailable
+          ? "Document search is temporarily unavailable, so I don't want to make a comparison without retrieving the relevant reports. Please try again in a moment."
+          : "I couldn't search your documents right now. Please try again shortly. If the issue persists, make sure your reports have been uploaded and indexed.";
         return res.json({
-          reply: "I couldn't search your documents right now. Please try again shortly. If the issue persists, make sure your reports have been uploaded and indexed.",
-          response: "I couldn't search your documents right now. Please try again shortly. If the issue persists, make sure your reports have been uploaded and indexed.",
+          reply: msg,
+          response: msg,
           sources: [],
           grounded: false,
+          evidenceScore: 0,
+          rag_available: false,
           document_search_unavailable: true,
         });
       }

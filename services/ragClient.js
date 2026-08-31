@@ -3,7 +3,9 @@ import logger from "../utils/logger.js";
 const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL;
 const RAG_SERVICE_SECRET = process.env.RAG_SERVICE_SECRET || "";
 const RAG_TIMEOUT_MS = 50000;
-const RAG_RETRY_DELAY_MS = parseInt(process.env.RAG_RETRY_DELAY_MS || "8000", 10);
+const RAG_MAX_RETRIES = parseInt(process.env.RAG_MAX_RETRIES || "3", 10);
+const RAG_RETRY_DELAY_MS = parseInt(process.env.RAG_RETRY_DELAY_MS || "5000", 10);
+const RAG_RETRY_MAX_DELAY_MS = parseInt(process.env.RAG_RETRY_MAX_DELAY_MS || "30000", 10);
 
 function parseRetryAfterMs(headerValue) {
   if (!headerValue) return null;
@@ -18,7 +20,16 @@ function parseRetryAfterMs(headerValue) {
 }
 
 function isRetryableStatus(status) {
-  return status === 429 || (status >= 500 && status <= 599);
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+function computeBackoffMs(attempt, retryAfterMs) {
+  if (retryAfterMs !== null) {
+    return Math.min(Math.max(retryAfterMs, 5000), RAG_RETRY_MAX_DELAY_MS);
+  }
+  const exp = RAG_RETRY_DELAY_MS * Math.pow(2, attempt);
+  const jitter = Math.floor(Math.random() * 1000);
+  return Math.min(exp + jitter, RAG_RETRY_MAX_DELAY_MS);
 }
 
 async function ragPost(path, body, userId) {
@@ -26,7 +37,11 @@ async function ragPost(path, body, userId) {
     return { ok: false, skipped: "RAG_SERVICE_URL not configured" };
   }
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const maxAttempts = Math.max(1, RAG_MAX_RETRIES);
+  const tStart = Date.now();
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const isLastAttempt = attempt === maxAttempts - 1;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), RAG_TIMEOUT_MS);
     try {
@@ -44,37 +59,48 @@ async function ragPost(path, body, userId) {
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        const err = new Error(`RAG ${path} responded ${res.status}: ${text.slice(0, 200)}`);
-        err.status = res.status;
-        err.retryAfter = res.headers.get("retry-after");
-        throw err;
+        const status = res.status;
+        const retryAfter = res.headers.get("retry-after");
+        if (!isRetryableStatus(status) || isLastAttempt) {
+          const text = await res.text().catch(() => "");
+          const err = new Error(`RAG ${path} responded ${status}: ${text.slice(0, 200)}`);
+          err.status = status;
+          err.retryAfter = retryAfter;
+          err.ragUnavailable = isRetryableStatus(status);
+          throw err;
+        }
+        const retryAfterMs = parseRetryAfterMs(retryAfter);
+        const delayMs = computeBackoffMs(attempt, retryAfterMs);
+        const elapsedMs = Date.now() - tStart;
+        logger.warn(JSON.stringify({ event: "rag_retry", path, attempt: attempt + 1, maxAttempts, status, retryAfter: retryAfter || null, delayMs, elapsedMs }));
+        clearTimeout(timer);
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
       }
       return { ok: true, data: await res.json() };
     } catch (err) {
       const isAbort = err.name === "AbortError";
       const status = err.status;
-      const shouldRetry = attempt < 2 && (isAbort || (status && isRetryableStatus(status)));
+      const isRetryable = isAbort || (status && isRetryableStatus(status));
 
+      if (err.ragUnavailable !== undefined) throw err;
+
+      if (!isRetryable || isLastAttempt) {
+        if (isAbort) throw new Error(`RAG ${path} timed out`);
+        throw err;
+      }
+
+      const retryAfterMs = parseRetryAfterMs(err.retryAfter || null);
+      const delayMs = computeBackoffMs(attempt, retryAfterMs);
+      const elapsedMs = Date.now() - tStart;
       if (isAbort) {
-        if (shouldRetry) {
-          logger.warn(`RAG ${path} timed out (attempt ${attempt + 1}/3), retrying in ${RAG_RETRY_DELAY_MS}ms`);
-          clearTimeout(timer);
-          await new Promise((r) => setTimeout(r, RAG_RETRY_DELAY_MS));
-          continue;
-        }
-        throw new Error(`RAG ${path} timed out`);
+        logger.warn(JSON.stringify({ event: "rag_retry", path, attempt: attempt + 1, maxAttempts, status: "timeout", retryAfter: null, delayMs, elapsedMs }));
+      } else {
+        logger.warn(JSON.stringify({ event: "rag_retry", path, attempt: attempt + 1, maxAttempts, status, retryAfter: err.retryAfter || null, delayMs, elapsedMs }));
       }
-
-      if (shouldRetry) {
-        const delayMs = parseRetryAfterMs(err.retryAfter) ?? RAG_RETRY_DELAY_MS;
-        logger.warn(`RAG ${path} responded ${status} (attempt ${attempt + 1}/3), retrying in ${delayMs}ms`);
-        clearTimeout(timer);
-        await new Promise((r) => setTimeout(r, delayMs));
-        continue;
-      }
-
-      throw err;
+      clearTimeout(timer);
+      await new Promise((r) => setTimeout(r, delayMs));
+      continue;
     } finally {
       clearTimeout(timer);
     }
@@ -94,7 +120,7 @@ export const indexDocument = async ({ userId, documentId, type, reportDate, sour
     }, userId);
   } catch (err) {
     logger.warn(`RAG_INDEX_FAILED: ${err.message}`);
-    return { ok: false, error: err.message };
+    return { ok: false, error: err.message, ragUnavailable: !!err.ragUnavailable };
   }
 };
 
