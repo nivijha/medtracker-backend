@@ -21,7 +21,7 @@ async function fetchReportFileDual(fileUrl) {
 export const reindexNoisy = async (req, res, next) => {
   try {
     const dryRun = req.query.dryRun === "true" || req.body?.dryRun === true;
-    const reports = await Report.find({}).lean();
+    const reports = await Report.find({ user: req.user.id }).lean();
     let scanned = 0;
     let candidates = 0;
     let reindexed = 0;
