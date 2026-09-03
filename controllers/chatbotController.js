@@ -3,6 +3,8 @@ import Appointment from "../models/Appointment.js";
 import Medication from "../models/Medication.js";
 import Report from "../models/Report.js";
 import logger from "../utils/logger.js";
+import { extractDates, isDateOnlyFollowUp } from "../utils/dateUtils.js";
+import { looksLikeDocumentQuery, isFollowUp } from "../utils/intentUtils.js";
 
 const INTENT_SYSTEM_PROMPT = `You are an intent classifier for a medical app chatbot.
 Analyze the user's message and return ONLY a valid JSON object – no prose, no markdown, no explanation.
@@ -89,29 +91,152 @@ export const chatWithAI = async (req, res) => {
 
     const userId = req.user.id;
     const userMessage = messages[messages.length - 1].content;
+    const previousQuery = messages.length >= 2 ? (messages[messages.length - 2].content || null) : null;
+
+    const extractedDates = extractDates(userMessage);
+    let followUpInherited = false;
+    let effectiveDates = extractedDates;
+    if (extractedDates.length === 0 && isDateOnlyFollowUp(userMessage) && previousQuery) {
+      const prevDates = extractDates(previousQuery);
+      if (prevDates.length > 0) {
+        const { extractDatesWithContext } = await import("../utils/dateUtils.js");
+        const inherited = extractDatesWithContext(userMessage, previousQuery);
+        if (inherited.length > 0) {
+          effectiveDates = inherited;
+          followUpInherited = true;
+        }
+      }
+    }
+
+    const wantsFollowUpContext = isFollowUp(userMessage, previousQuery);
+    const looksDoc = looksLikeDocumentQuery(userMessage);
+    const shouldExpandFollowUp = wantsFollowUpContext && previousQuery && looksLikeDocumentQuery(previousQuery);
+
+    let effectiveQuery = userMessage;
+    if (shouldExpandFollowUp || followUpInherited) {
+      const { rewriteShortFollowUp } = await import("../utils/intentUtils.js");
+      effectiveQuery = rewriteShortFollowUp
+        ? rewriteShortFollowUp(userMessage, previousQuery)
+        : `${previousQuery} ${userMessage}`;
+      logger.info(JSON.stringify({ event: "followup_rewrite", raw: userMessage, previous: previousQuery, effective: effectiveQuery, inheritedDates: effectiveDates }));
+    }
+
+    logger.info(JSON.stringify({
+      event: "chatbot_request",
+      raw_query: userMessage,
+      effective_query: effectiveQuery,
+      extracted_dates: effectiveDates,
+      followUpInherited,
+      looks_document_query: looksDoc,
+    }));
+
+    const deterministicDoc = looksDoc || looksLikeDocumentQuery(effectiveQuery) || effectiveDates.length > 0;
 
     let parsed;
-    try {
-      const raw = await llamaChat(INTENT_SYSTEM_PROMPT, userMessage);
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-      parsed = JSON.parse(cleaned);
-    } catch {
-      parsed = { intent: "out_of_scope", entities: {} };
+    let intentSource = "deterministic";
+    if (deterministicDoc) {
+      parsed = { intent: "document_query", entities: {} };
+      logger.info(JSON.stringify({ event: "intent_resolved", intent: "document_query", source: "deterministic", raw: userMessage }));
+    } else {
+      intentSource = "llm";
+      try {
+        const raw = await llamaChat(INTENT_SYSTEM_PROMPT, userMessage);
+        const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+        parsed = JSON.parse(cleaned);
+      } catch {
+        parsed = { intent: "out_of_scope", entities: {} };
+      }
+      logger.info(JSON.stringify({ event: "intent_resolved", intent: parsed.intent, source: "llm", raw: userMessage }));
+      if (parsed.intent === "out_of_scope" && effectiveDates.length > 0) {
+        parsed = { intent: "document_query", entities: {} };
+        logger.info(JSON.stringify({ event: "intent_overridden", from: "out_of_scope", to: "document_query", reason: "has_extracted_dates", dates: effectiveDates }));
+      }
     }
 
     const { intent, entities = {} } = parsed;
 
     if (intent === "document_query") {
+      let dateFilters = null;
+      let missingDates = [];
+      if (effectiveDates.length > 0) {
+        const resolved = await resolveReportsForDates(userId, effectiveDates);
+        if (resolved.found.length === 0 && resolved.missing.length > 0) {
+          const missList = resolved.missing.join(", ");
+          return res.json({
+            reply: `I couldn't find a report for ${missList}. Please make sure those reports have been uploaded.`,
+            response: `I couldn't find a report for ${missList}. Please make sure those reports have been uploaded.`,
+            sources: [],
+            grounded: false,
+            evidenceScore: 0,
+            missingDates: resolved.missing,
+          });
+        }
+        if (resolved.found.length > 0) {
+          dateFilters = { documentIds: resolved.found.map((r) => r._id.toString()) };
+          missingDates = resolved.missing;
+          logger.info(JSON.stringify({ event: "date_resolution", requested: effectiveDates, found: resolved.found.map((r) => r.reportDate), missing: resolved.missing }));
+        }
+      }
+
+      const ragQuery = effectiveQuery;
+      const previousForRag = shouldExpandFollowUp ? previousQuery : null;
+
       try {
         const { queryRag } = await import("../services/ragClient.js");
-        const ragResponse = await queryRag({ userId, query: userMessage });
+        const ragResponse = await queryRag({ userId, query: ragQuery, filters: dateFilters, previousQuery: previousForRag });
+
+        if (ragResponse.grounded === false && ragResponse.evidenceScore === 0 && ragResponse.rag_available === false) {
+          logger.warn(JSON.stringify({ event: "rag_unavailable_propagated", query: ragQuery }));
+          return res.json({
+            reply: "Document search is temporarily unavailable, so I don't want to make a comparison without retrieving the relevant reports. Please try again in a moment.",
+            response: "Document search is temporarily unavailable, so I don't want to make a comparison without retrieving the relevant reports. Please try again in a moment.",
+            sources: [],
+            grounded: false,
+            evidenceScore: 0,
+            rag_available: false,
+            generation_available: false,
+            document_search_unavailable: true,
+          });
+        }
+
+        if (missingDates.length > 0 && ragResponse.answer) {
+          const note = `\n\nNote: no report was found for ${missingDates.join(", ")}.`;
+          ragResponse.answer += note;
+        }
+
+        const genFailed = ragResponse.answer === "Answer could not be generated at this time.";
+        if (genFailed) {
+          logger.warn(JSON.stringify({ event: "rag_generation_failed", query: ragQuery, evidenceScore: ragResponse.evidenceScore, grounded: ragResponse.grounded }));
+          const fallbackSources = ragResponse.sources || [];
+          const fallbackCandidates = ragResponse.candidates || [];
+          if (fallbackCandidates.length > 0 || fallbackSources.length > 0) {
+            const evidenceLines = (fallbackCandidates.length > 0 ? fallbackCandidates : fallbackSources)
+              .slice(0, 5)
+              .map((c, i) => `Source ${i + 1}: ${String(c.text || "").slice(0, 300)}`)
+              .join("\n\n");
+            return res.json({
+              response: `I found relevant information but couldn't generate a full summary right now. Here is the retrieved evidence:\n\n${evidenceLines}`,
+              reply: `I found relevant information but couldn't generate a full summary right now. Here is the retrieved evidence:\n\n${evidenceLines}`,
+              sources: fallbackSources,
+              candidates: fallbackCandidates,
+              grounded: ragResponse.grounded,
+              evidenceScore: ragResponse.evidenceScore,
+              generation_available: false,
+            });
+          }
+        }
+
         return res.json({
           response: ragResponse.answer || ragResponse.reply || "I've reviewed your documents, but couldn't generate a specific answer.",
           reply: ragResponse.answer || ragResponse.reply || "I've reviewed your documents, but couldn't generate a specific answer.",
           sources: ragResponse.sources || [],
+          candidates: ragResponse.candidates || [],
           grounded: ragResponse.grounded !== false,
           evidenceScore: ragResponse.evidenceScore || 0,
+          rag_available: ragResponse.rag_available !== false,
+          generation_available: !genFailed,
           queryType: ragResponse.queryType || "document_query",
+          missingDates: missingDates.length > 0 ? missingDates : undefined,
         });
       } catch (ragError) {
         logger.error(`RAG_QUERY_ERROR: ${ragError.message}`);
@@ -126,12 +251,22 @@ export const chatWithAI = async (req, res) => {
           grounded: false,
           evidenceScore: 0,
           rag_available: false,
+          generation_available: false,
           document_search_unavailable: true,
         });
       }
     }
 
     if (intent === "out_of_scope") {
+      if (looksLikeDocumentQuery(userMessage) || effectiveDates.length > 0) {
+        logger.warn(JSON.stringify({ event: "out_of_scope_redirect", raw: userMessage, dates: effectiveDates }));
+        return res.json({
+          reply: "I can help with your reports. Try: 'what does my July 13 report say?' or 'compare my July 13 and July 23 reports'.",
+          response: "I can help with your reports. Try: 'what does my July 13 report say?' or 'compare my July 13 and July 23 reports'.",
+          sources: [],
+          grounded: false,
+        });
+      }
       return res.json({
         reply: "Sorry, this is beyond my scope. I can only help with your MedTracker appointments, medications, reports, and other app-related tasks.",
       });
@@ -309,3 +444,23 @@ export const chatWithAI = async (req, res) => {
     return res.status(500).json({ error: "AI request failed. Please try again." });
   }
 };
+
+async function resolveReportsForDates(userId, isoDates) {
+  const found = [];
+  const missing = [];
+  for (const iso of isoDates) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) {
+      missing.push(iso);
+      continue;
+    }
+    const start = new Date(d);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(d);
+    end.setHours(23, 59, 59, 999);
+    const report = await Report.findOne({ user: userId, reportDate: { $gte: start, $lte: end } }).lean();
+    if (report) found.push(report);
+    else missing.push(iso);
+  }
+  return { found, missing };
+}

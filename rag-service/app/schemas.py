@@ -62,6 +62,8 @@ class QueryResponse(BaseModel):
     query: str
     rewrittenQuery: str | None = None
     grounded: bool = False
+    rag_available: bool = True
+    generation_available: bool = True
     # Relevance/grounding signal (NOT a calibrated probability; see ADR-016).
     evidenceScore: float = 0.0
     answer: str = ""

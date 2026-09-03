@@ -24,55 +24,86 @@ export const generateReportSummary = async (documentText) => {
           role: "user",
           content: `
 ### Role & Context
-You are a highly skilled Clinical Data Extraction AI. The user has uploaded a medical document (Lab Test, Imaging Report, Pathology, etc.). Your task is to extract a structured, highly valuable clinical summary that a doctor or the patient can quickly review.
+You are a Senior Clinical Data Specialist. Read the medical document and produce a thorough, detailed, evidence-faithful summary that a patient and doctor can act on. Omitting a measured value is a defect.
 
-### Instructions
-Analyze the text and extract information into the sections below. If a section is not applicable or not found, write "None noted" or "N/A".
+### A) Patient Emergency Card (5 fields)
+Extract with absolute accuracy. If not stated, write "Not Specified." Preserve exact spellings.
+1. **Blood Group:** ABO + Rh (e.g., O positive)
+2. **Allergies:** drug/food/environmental + reaction
+3. **Chronic Conditions:** ongoing issues
+4. **Current Medications:** names, dosages, frequency, route
+5. **Emergency Contact:** name, relationship, phone
 
-1. **Document Type & Date:** Type of report (e.g., CBC Blood Test, Chest X-Ray) and date of examination/collection/reporting — include all three timestamps when present.
-2. **Key Findings / Parameters:** List EVERY measured value with its unit, Bio. Ref. Interval, and flag (High/Low/Borderline/Within range) when the interval is printed. Highlight abnormals explicitly.
-3. **What This Means (plain English, 1-2 lines per abnormal):** For each flagged value, briefly explain what the reference range implies, in plain language. Do NOT diagnose or prescribe — only relate the value to its printed interval.
-4. **Diagnosis / Impressions:** Doctor's or radiologist's final conclusion, diagnosis, or impression — quote impression lines verbatim when present.
-5. **Patient Vitals / Conditions:** Patient demographics, history, baseline conditions, or vitals mentioned.
-6. **Action Items / Recommendations:** Follow-ups, medications, lifestyle changes suggested in the report — quote when possible.
+### B) Detailed Clinical Summary — be thorough, not terse
+Cover every section below. If no data for a section, write "None noted in this document." Include all measured values.
+
+1. **Report Identity:** type (e.g., Hormone Panel, HbA1c, CBC, Imaging), lab/hospital, all timestamps (collection/received/reported), demographics on header (age, sex, ID where printed). List each timestamp separately if they differ.
+2. **Complete Lab / Imaging Results (table + bullets):**
+   - Table columns: Test | Result | Unit | Bio. Ref. Interval | Flag (High/Low/Borderline/Within/N/A)
+   - One row per measured parameter. Preserve exact numbers/units (e.g., "FSH 6.44 mIU/mL"). If interval not printed, write N/A.
+   - After the table, a bullet list of the same rows: "FSH — 6.44 mIU/mL (Ref: 2.5–10.20 Follicular) — Within range"
+3. **Abnormal & Borderline Highlights:** every High/Low or within 10% of boundary, with value, interval, distance, and quoted interpretation note.
+4. **What This Means (2–3 sentences per abnormal/borderline, plain English):** explain what the printed interval implies; do NOT diagnose or prescribe — only relate the number to its interval.
+5. **Impressions / Diagnosis:** conclusion in full — quote verbatim via blockquote when present.
+6. **Patient Context:** demographics, history, vitals, fasting status, cycle phase, specimen type, collection site when mentioned.
+7. **Action Items / Follow-ups:** every follow-up/medication/lifestyle/repeat-test suggestion — quote wording. If none: "No follow-up stated; discuss timing with your clinician."
+8. **Limitations & Next Steps:** single-report limitation + records-based next step (do not invent a prior value; state "no prior report in this document" if absent).
 
 ### Constraints
 - Do NOT make up medical information. Only use the provided text.
-- Be concise but clinically precise.
-- DO NOT use any emojis or decorative symbols.
-- **Formatting Rule 1**: Use a markdown bullet point (\`- \`) for EVERY item you list under the headings.
-- **Formatting Rule 2**: Leave a blank empty line after EVERY heading.
-- If the document is not a medical report, state: "This document does not appear to contain standard medical report data."
+- Do NOT diagnose or prescribe. Explain intervals only.
+- DO NOT use emojis or decorative symbols.
+- Formatting Rule 1: markdown bullet (\`- \`) for EVERY listed item.
+- Formatting Rule 2: blank empty line after EVERY heading.
+- Prefer quoting exact phrasing over paraphrasing.
+- If not a medical report, state: "This document does not appear to contain standard medical report data."
 
 ### Medical Record Text:
 """
 ${truncatedText}
 """
 
-### Output Format
+### Output Format — follow this skeleton exactly
 **Clinical Report Summary**
 
-**Document Type & Date:**
-- [Type & Date with collection/reported times]
+**Blood Group:** [Value]
+**Allergies:** [List or None]
+**Chronic Conditions:** [List or None]
+**Current Medications:** [List or None]
+**Emergency Contact:** [Name - Relationship - Phone]
 
-**Key Findings / Abnormalities:**
-- [Finding — value, unit, ref interval, flag]
+**Report Identity:**
+- [Type, lab, all timestamps, demographics]
+
+**Complete Results (Table):**
+| Test | Result | Unit | Bio. Ref. Interval | Flag |
+|------|--------|------|---------------------|------|
+| [e.g., FSH] | [6.44] | [mIU/mL] | [2.50–10.20] | [Within range] |
+
+**Complete Results (Bullets):**
+- [Test — value unit (Ref: interval) — Flag]
+
+**Abnormal & Borderline Highlights:**
+- [Value, interval, distance, quoted note]
 
 **What This Means:**
-- [Per-abnormal plain-English note]
+- [2–3 sentence note per abnormal/borderline]
 
 **Impressions / Diagnosis:**
-- [Conclusion]
+> [Verbatim impression]
 
 **Patient Context:**
-- [Conditions/Vitals]
+- [Demographics, history, vitals]
 
 **Action Items:**
-- [Recommendation]
+- [Follow-up]
+
+**Limitations & Next Steps:**
+- [Limitation + next step]
 `,
         },
       ],
-      max_tokens: 1100,
+      max_tokens: 1600,
     });
     return chatCompletion.choices[0].message.content;
   } catch (error) {

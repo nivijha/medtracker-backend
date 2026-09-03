@@ -166,16 +166,29 @@ async def query(
 
     sources: list[SourceOut] = []
     answer = ""
+    generation_available = True
     if grounded:
         t2 = time.time()
+        gen_error: Exception | None = None
         try:
             user_prompt = build_user_prompt(effective_query, reranked, context=None)
             answer = generation.generate(GROUNDING_SYSTEM_PROMPT, user_prompt)
         except Exception as e:
-            logger.warning(json.dumps({"event": "generation_failed", "query_id": query_id, "error": str(e)}))
-            answer = "Answer could not be generated at this time."
+            gen_error = e
+            generation_available = False
+            logger.warning(json.dumps({"event": "generation_failed", "query_id": query_id, "error": str(e)[:500]}))
+            evidence_lines = "\n\n".join(
+                f"Source {i + 1} [{c.get('source_filename') or c.get('section') or c['document_id'][:8]}]: {c.get('chunk_text','')[:400]}"
+                for i, c in enumerate(reranked[:5])
+            )
+            answer = (
+                "I found relevant information but couldn't generate a full summary right now. "
+                "Here is the retrieved evidence:\n\n" + evidence_lines
+            )
         finally:
             gen_ms = (time.time() - t2) * 1000
+        if gen_error is not None:
+            logger.info(json.dumps({"event": "generation_fallback_evidence", "query_id": query_id, "candidates": len(reranked)}))
         sources = [
             SourceOut(
                 documentId=c["document_id"],
@@ -194,6 +207,8 @@ async def query(
         query=req.query,
         rewrittenQuery=rewritten,
         grounded=grounded,
+        rag_available=True,
+        generation_available=generation_available,
         evidenceScore=evidence_score,
         answer=answer,
         sources=sources,

@@ -39,6 +39,16 @@ def _mentions_multiple_dates(query: str) -> bool:
     )
     if len(explicit_month_day) >= 2:
         return True
+    explicit_day_month = re.findall(
+        r"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b",
+        query,
+        re.IGNORECASE,
+    )
+    if len(explicit_day_month) >= 2:
+        return True
+    ordinals = re.findall(r"\b\d{1,2}(?:st|nd|rd|th)\b", query)
+    if len(ordinals) >= 2 and re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)", query, re.IGNORECASE):
+        return True
     return False
 
 

@@ -348,8 +348,9 @@ def test_generation_failure_preserves_grounding_and_evidence():
             "The patient is currently taking metformin"
         )
 
-        # Answer degrades gracefully instead of claiming insufficient evidence.
-        assert body["answer"] == "Answer could not be generated at this time."
+        assert body["generation_available"] is False
+        assert body["rag_available"] is True
+        assert "found relevant information" in body["answer"]
         assert body["answer"] != "Insufficient evidence was found in the available records."
 
     finally:

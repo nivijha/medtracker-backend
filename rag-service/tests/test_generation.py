@@ -74,10 +74,9 @@ def test_generation_failure_preserves_evidence_without_fabrication():
         headers={"X-Rag-Service-Secret": "test-secret", "X-User-Id": "u1"},
     )
     body = r.json()
-    # Evidence was sufficient -> stays grounded.
     assert body["grounded"] is True
-    # Never fabricates: explicit degradation message instead of LLM output.
-    assert body["answer"] == "Answer could not be generated at this time."
-    # Retrieved evidence survives the failure.
+    assert body["generation_available"] is False
+    assert body["rag_available"] is True
+    assert "found relevant information" in body["answer"]
     assert len(body["sources"]) > 0
     assert len(body["candidates"]) > 0
