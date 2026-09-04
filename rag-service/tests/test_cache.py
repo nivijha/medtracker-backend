@@ -29,6 +29,7 @@ def _client(secret="test-secret"):
     app.dependency_overrides[query.get_reranker] = lambda: LexicalReranker()
     app.dependency_overrides[query.get_generation] = lambda: gen
     app.dependency_overrides[query.get_cache] = lambda: cache
+    app.dependency_overrides[ingestion.get_cache] = lambda: cache
     return TestClient(app), store, cache, gen
 
 
@@ -48,10 +49,43 @@ def _index(client, user, text, doc_id):
 
 def test_cache_key_format():
     k = make_cache_key("u1", "1", "Metformin dosage?")
-    assert k == "rag:u1:1:" + make_cache_key("u1", "1", "Metformin dosage?").split(":")[-1]
     assert k.startswith("rag:u1:1:")
+    assert len(k.split(":")) == 5
     # Same query (case/space-insensitive) -> same key.
     assert make_cache_key("u1", "1", "metformin dosage?") == k
+
+
+def test_cache_key_separates_filters():
+    assert make_cache_key("u1", "1", "report summary", {"documentIds": ["d1"]}) != make_cache_key(
+        "u1", "1", "report summary", {"documentIds": ["d2"]}
+    )
+
+
+def test_no_evidence_result_is_not_cached():
+    client, _, cache, _ = _client()
+    result = client.post(
+        "/rag/query",
+        json={"userId": "u1", "query": "no indexed report exists"},
+        headers={"X-Rag-Service-Secret": "test-secret", "X-User-Id": "u1"},
+    )
+    assert result.status_code == 200
+    assert result.json()["grounded"] is False
+    assert cache._store == {}
+
+
+def test_indexing_invalidates_user_cache():
+    client, _, cache, _ = _client()
+    _index(client, "u1", "Metformin 500 mg daily.", "d1")
+    query_result = client.post(
+        "/rag/query",
+        json={"userId": "u1", "query": "metformin dosage"},
+        headers={"X-Rag-Service-Secret": "test-secret", "X-User-Id": "u1"},
+    )
+    assert query_result.json()["grounded"] is True
+    assert cache._store
+
+    _index(client, "u1", "Metformin 500 mg daily.", "d2")
+    assert cache._store == {}
 
 
 def test_query_is_cached_and_not_regenerated():

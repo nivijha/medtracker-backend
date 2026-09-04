@@ -87,7 +87,8 @@ async def query(
     rewritten = effective_query if effective_query != req.query else None
 
     # Cache lookup (ADR-020/021): key = rag:{userId}:{indexVersion}:{queryHash}.
-    cache_key = make_cache_key(verified_user_id, settings.index_version, effective_query)
+    request_filters = filters_to_dict(req.filters)
+    cache_key = make_cache_key(verified_user_id, settings.index_version, effective_query, request_filters)
     cached = cache.get(cache_key)
     if cached is not None:
         logger.info(
@@ -112,7 +113,7 @@ async def query(
             query=effective_query,
             query_vec=query_vec,
             top_k=settings.rerank_top_n,
-            filters=filters_to_dict(req.filters),
+            filters=request_filters,
         )
     except Exception as e:
         msg = str(e).lower()
@@ -227,10 +228,11 @@ async def query(
     )
 
     # Persist to cache (skips PHI; only stores the synthesized response).
-    try:
-        cache.set(cache_key, response.model_dump(), settings.rag_cache_ttl)
-    except Exception as e:
-        logger.warning(json.dumps({"event": "cache_set_failed", "query_id": query_id, "error": str(e)}))
+    if grounded:
+        try:
+            cache.set(cache_key, response.model_dump(), settings.rag_cache_ttl)
+        except Exception as e:
+            logger.warning(json.dumps({"event": "cache_set_failed", "query_id": query_id, "error": str(e)}))
 
     logger.info(
         json.dumps(

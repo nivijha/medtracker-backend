@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
@@ -50,6 +51,7 @@ async def index_document(
     req: IndexRequest,
     embedder: EmbeddingProvider = Depends(get_embedder),
     store: RetrievalStore = Depends(get_default_store),
+    cache: CacheStore = Depends(get_cache),
     verified_user_id: str = Depends(verify_user_id),
 ):
     chunks = build_chunks(
@@ -69,6 +71,10 @@ async def index_document(
     for c, e in zip(chunks, embeddings):
         c["embedding"] = e
     store.index_chunks(chunks)
+    try:
+        cache.invalidate_user(verified_user_id)
+    except Exception as e:
+        logging.getLogger("rag").warning(json.dumps({"event": "cache_invalidation_failed", "user_id": verified_user_id, "error": str(e)[:200]}))
     return IndexResponse(indexed=True, documentId=req.documentId, chunkCount=len(chunks))
 
 

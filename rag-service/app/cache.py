@@ -23,6 +23,7 @@ _default_cache: CacheStore | None = None
 class CacheStore(Protocol):
     def get(self, key: str) -> Optional[dict]: ...
     def set(self, key: str, value: dict, ttl: int) -> None: ...
+    def invalidate_user(self, user_id: str) -> None: ...
 
 
 class InMemoryCache:
@@ -37,6 +38,11 @@ class InMemoryCache:
 
     def set(self, key: str, value: dict, ttl: int = 0) -> None:
         self._store[key] = json.dumps(value)
+
+    def invalidate_user(self, user_id: str) -> None:
+        prefix = f"{CACHE_PREFIX}:{user_id}:"
+        for key in [key for key in self._store if key.startswith(prefix)]:
+            del self._store[key]
 
 
 class RedisCache:
@@ -60,10 +66,19 @@ class RedisCache:
     def set(self, key: str, value: dict, ttl: int = 3600) -> None:
         self._ensure().set(key, json.dumps(value), ex=ttl if ttl else None)
 
+    def invalidate_user(self, user_id: str) -> None:
+        client = self._ensure()
+        prefix = f"{CACHE_PREFIX}:{user_id}:"
+        keys = list(client.scan_iter(match=f"{prefix}*"))
+        if keys:
+            client.delete(*keys)
 
-def make_cache_key(user_id: str, index_version: str, query: str) -> str:
+
+def make_cache_key(user_id: str, index_version: str, query: str, filters: dict | None = None) -> str:
     query_hash = hashlib.sha256(query.strip().lower().encode("utf-8")).hexdigest()[:16]
-    return f"{CACHE_PREFIX}:{user_id}:{index_version}:{query_hash}"
+    filter_json = json.dumps(filters or {}, sort_keys=True, separators=(",", ":"))
+    filter_hash = hashlib.sha256(filter_json.encode("utf-8")).hexdigest()[:16]
+    return f"{CACHE_PREFIX}:{user_id}:{index_version}:{query_hash}:{filter_hash}"
 
 
 def get_default_cache() -> CacheStore:
