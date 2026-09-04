@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_api_url: str = "https://api-inference.huggingface.co"
     embedding_api_key: str = ""
+    embedding_connect_timeout: float = 10.0
+    embedding_read_timeout: float = 60.0
+    embedding_write_timeout: float = 30.0
+    embedding_pool_timeout: float = 10.0
+    embedding_max_retries: int = 3
+    embedding_retry_delay_ms: int = 2000
+    embedding_retry_max_delay_ms: int = 4000
     chunk_size: int = 1500
     chunk_overlap: int = 200
     top_k: int = 10
