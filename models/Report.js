@@ -56,6 +56,18 @@ const reportSchema = new mongoose.Schema(
     summaryGeneratedAt: {
       type: Date,
     },
+
+    ragIndexed: {
+      type: String,
+      enum: ["PENDING", "INDEXED", "FAILED"],
+      default: "PENDING",
+      index: true,
+    },
+
+    ragIndexError: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );

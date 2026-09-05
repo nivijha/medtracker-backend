@@ -90,6 +90,8 @@ const uploadReport = async (req, res, next) => {
       description: reportDescription,
       doctorName: doctorName ? doctorName.trim() : undefined,
       reportDate,
+      ragIndexed: "PENDING",
+      ragIndexError: null,
     });
 
     import("../controllers/ragController.js")
