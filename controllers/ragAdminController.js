@@ -58,6 +58,7 @@ export const reindexNoisy = async (req, res, next) => {
 
       if (dryRun) continue;
 
+      await Report.updateOne({ _id: report._id }, { $set: { ragIndexed: "PENDING", ragIndexError: null } });
       try {
         const r = await indexDocument({
           userId: report.user.toString(),
@@ -67,11 +68,19 @@ export const reindexNoisy = async (req, res, next) => {
           sourceFilename: report.originalFilename || report.cloudinaryId || report._id.toString(),
           text,
         });
-        if (r && r.ok !== false) reindexed += 1;
-        else failed += 1;
+        if (r && r.ok !== false) {
+          reindexed += 1;
+          await Report.updateOne({ _id: report._id }, { $set: { ragIndexed: "INDEXED", ragIndexError: null } });
+        } else {
+          failed += 1;
+          const safeErr = String(r?.error || "index failed").slice(0, 200).replace(/https?:\/\/\S+/g, "[url]");
+          await Report.updateOne({ _id: report._id }, { $set: { ragIndexed: "FAILED", ragIndexError: safeErr } });
+        }
       } catch (err) {
         failed += 1;
-        logger.warn(`REINDEX_ERROR ${report._id}: ${err.message}`);
+        const safeErr = String(err.message || "unknown").slice(0, 200).replace(/https?:\/\/\S+/g, "[url]");
+        await Report.updateOne({ _id: report._id }, { $set: { ragIndexed: "FAILED", ragIndexError: safeErr } });
+        logger.warn(`REINDEX_ERROR ${report._id}: ${safeErr.slice(0, 100)}`);
       }
 
       await sleep(REINDEX_PAUSE_MS);

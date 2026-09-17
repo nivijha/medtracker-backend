@@ -31,9 +31,16 @@ async function fetchReportFileDual(fileUrl) {
   return { ok: false, status: firstStatus || 404 };
 }
 
+const activeIndexings = new Set();
+
 export const indexReportById = async (reportId, userId) => {
-  const t0 = Date.now();
   const docId = reportId.toString();
+  if (activeIndexings.has(docId)) {
+    logger.info(JSON.stringify({ event: "rag_index_skipped_concurrent", document_id: docId }));
+    return;
+  }
+  activeIndexings.add(docId);
+  const t0 = Date.now();
   logger.info(JSON.stringify({ event: "rag_index_started", document_id: docId }));
   try {
     const report = await Report.findById(reportId);
@@ -83,6 +90,8 @@ export const indexReportById = async (reportId, userId) => {
       await Report.updateOne({ _id: reportId }, { $set: { ragIndexed: "FAILED", ragIndexError: errMsg } });
     } catch (_) {}
     logger.warn(JSON.stringify({ event: "rag_index_failed", document_id: docId, error_type: "exception", error: errMsg.slice(0, 100), latency_ms: Date.now() - t0 }));
+  } finally {
+    activeIndexings.delete(docId);
   }
 };
 

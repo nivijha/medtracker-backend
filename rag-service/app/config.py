@@ -9,10 +9,12 @@ class Settings(BaseSettings):
     database_url: str = ""
     pg_rag_database_url: str = ""
     redis_url: str = ""
-    embedding_provider: str = "local"
+    embedding_provider: str = "lambda"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_api_url: str = "https://api-inference.huggingface.co"
     embedding_api_key: str = ""
+    lambda_embedding_url: str = ""
+    lambda_embedding_secret: str = ""
     embedding_connect_timeout: float = 10.0
     embedding_read_timeout: float = 60.0
     embedding_write_timeout: float = 30.0
@@ -31,7 +33,7 @@ class Settings(BaseSettings):
     openrouter_model: str = "openai/gpt-4o-mini"
     evidence_threshold: float = 0.15
     rag_cache_ttl: int = 3600
-    index_version: str = "2"
+    index_version: str = "3"
     log_level: str = "INFO"
 
 

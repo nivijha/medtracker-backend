@@ -18,6 +18,19 @@ logging.basicConfig(level=getattr(logging, _settings.log_level.upper(), logging.
 
 app = FastAPI(title="MedTracker RAG Service", version="0.2.0")
 
+
+@app.on_event("startup")
+def warmup_local_embedder() -> None:
+    if getattr(_settings, "embedding_provider", "lambda") == "local":
+        try:
+            from .embedding import get_default_embedder
+
+            emb = get_default_embedder()
+            emb.embed(["warmup"])
+            logging.getLogger("rag").info("local embedder warmed up model=%s dim=%s", _settings.embedding_model, getattr(emb, "dim", 384))
+        except Exception as e:
+            logging.getLogger("rag").warning("local embedder warmup failed: %s", str(e)[:200])
+
 app.include_router(ingestion.router, prefix="/rag")
 app.include_router(query.router, prefix="/rag")
 

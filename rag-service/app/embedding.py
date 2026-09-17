@@ -245,11 +245,84 @@ class FakeEmbedder:
         return out
 
 
+LocalSentenceTransformerEmbedder = SentenceTransformerEmbedder
+
+
+class LambdaEmbedder:
+    dim = 384
+
+    def __init__(self, url: str, secret: str, timeout: float = 10.0) -> None:
+        self._url = url.rstrip("/")
+        self._secret = secret
+        self._timeout = timeout
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        from .config import settings as _s
+
+        max_attempts = max(1, int(getattr(_s, "embedding_max_retries", 3)))
+        base_delay = int(getattr(_s, "embedding_retry_delay_ms", 2000))
+        max_delay = int(getattr(_s, "embedding_retry_max_delay_ms", 4000))
+        import httpx
+
+        headers = {"Content-Type": "application/json"}
+        if self._secret:
+            headers["X-Embedding-Secret"] = self._secret
+        last_exc = None
+        for attempt in range(1, max_attempts + 1):
+            is_last = attempt == max_attempts
+            logger.info("embedding_started attempt=%d max_attempts=%d texts=%d", attempt, max_attempts, len(texts))
+            try:
+                with httpx.Client(timeout=self._timeout) as client:
+                    resp = client.post(self._url, headers=headers, json={"texts": texts})
+                if resp.status_code in (400, 401, 403):
+                    raise RuntimeError(f"Lambda embedding failed ({resp.status_code}): {resp.text[:200]}")
+                if resp.status_code in _RETRYABLE_STATUS:
+                    if is_last:
+                        raise RuntimeError(f"Lambda embedding failed ({resp.status_code}): {resp.text[:200]}")
+                    delay = min(base_delay * (2 ** (attempt - 1)) + random.randint(0, 400), max_delay)
+                    time.sleep(delay / 1000)
+                    continue
+                if resp.status_code >= 400:
+                    raise RuntimeError(f"Lambda embedding failed ({resp.status_code}): {resp.text[:200]}")
+                data = resp.json()
+                embs = data.get("embeddings")
+                if not isinstance(embs, list):
+                    raise RuntimeError("Lambda response missing embeddings")
+                bad = {len(v) for v in embs}
+                if bad != {self.dim}:
+                    raise ValueError(f"Lambda returned dimensions {sorted(bad)}, expected {self.dim}")
+                out = []
+                for vec in embs:
+                    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+                    out.append([float(v) / norm for v in vec])
+                logger.info("embedding_completed attempt=%d texts=%d", attempt, len(texts))
+                return out
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout, httpx.ConnectError, httpx.ReadError, httpx.NetworkError) as e:
+                last_exc = e
+                if is_last:
+                    break
+                delay = min(base_delay * (2 ** (attempt - 1)) + random.randint(0, 400), max_delay)
+                time.sleep(delay / 1000)
+                continue
+            except RuntimeError:
+                raise
+            except ValueError:
+                raise
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("Lambda embedding failed after retries")
+
+_default_embedder: EmbeddingProvider | None = None
+
+
 def get_default_embedder(model_name: str | None = None) -> EmbeddingProvider:
+    global _default_embedder
     from .config import settings
 
-    provider = getattr(settings, "embedding_provider", "local")
-    if provider == "api":
+    provider = getattr(settings, "embedding_provider", "lambda")
+    if provider in ("api", "hf"):
         api_key = getattr(settings, "embedding_api_key", "")
         api_url = getattr(settings, "embedding_api_url", "https://api-inference.huggingface.co")
         if not api_key:
@@ -259,4 +332,15 @@ def get_default_embedder(model_name: str | None = None) -> EmbeddingProvider:
             api_key=api_key,
             api_url=api_url,
         )
-    return SentenceTransformerEmbedder(model_name or settings.embedding_model)
+    if provider == "lambda":
+        url = getattr(settings, "lambda_embedding_url", "")
+        secret = getattr(settings, "lambda_embedding_secret", "")
+        if not url:
+            raise RuntimeError("lambda_embedding_url required when embedding_provider=lambda")
+        return LambdaEmbedder(url, secret)
+    if _default_embedder is not None and model_name is None:
+        return _default_embedder
+    emb = SentenceTransformerEmbedder(model_name or settings.embedding_model)
+    if model_name is None:
+        _default_embedder = emb
+    return emb

@@ -9,3 +9,4 @@ python-dateutil
 pytest
 httpx
 redis
+numpy
