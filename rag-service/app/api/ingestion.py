@@ -13,6 +13,8 @@ from ..ingestion import build_chunks
 from ..retrieval import RetrievalStore, get_default_store
 from ..schemas import HealthResponse, IndexRequest, IndexResponse, DeleteRequest, DeleteResponse
 
+logger = logging.getLogger("rag")
+
 router = APIRouter()
 
 
@@ -54,6 +56,13 @@ async def index_document(
     cache: CacheStore = Depends(get_cache),
     verified_user_id: str = Depends(verify_user_id),
 ):
+    logger.info(json.dumps({
+        "event": "rag_index_request_received",
+        "document_id": req.documentId,
+        "user_id": verified_user_id,
+        "text_len": len(req.text or ""),
+        "pages": len(req.pages) if req.pages else None,
+    }))
     chunks = build_chunks(
         document_id=req.documentId,
         user_id=verified_user_id,
