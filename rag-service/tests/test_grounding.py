@@ -502,3 +502,92 @@ def test_unrelated_query_abstains_end_to_end():
     finally:
         settings.embedding_provider = original_provider
         settings.rag_service_secret = original_secret
+
+
+# ---------------------------------------------------------------------------
+# RAG investigation regression guards (Lambda-provider grounding contract)
+# ---------------------------------------------------------------------------
+def test_lambda_provider_sigmoid_grounding_negative_logit_abstains():
+    """Provider 'lambda' squashes rerank_score (raw CrossEncoder logit) via
+    sigmoid. A negative logit reproduces the production evidence_breakdown
+    (evidence_score=0.0785) and abstains."""
+    original_provider = settings.embedding_provider
+    try:
+        settings.embedding_provider = "lambda"
+
+        score = compute_evidence_score([{"rerank_score": -2.4627890586853027, "similarity": 0.450693, "score": 0.016393}])
+        expected = round(1.0 / (1.0 + math.exp(2.4627890586853027)), 4)
+        assert score == expected == 0.0785
+        assert score < settings.evidence_threshold
+        assert should_abstain(score)
+        assert not should_abstain(0.5)
+    finally:
+        settings.embedding_provider = original_provider
+
+
+def test_lambda_provider_sigmoid_grounding_positive_logit_grounds():
+    """A positive CrossEncoder logit maps above the threshold and grounds."""
+    original_provider = settings.embedding_provider
+    try:
+        settings.embedding_provider = "lambda"
+        score = compute_evidence_score([{"rerank_score": 2.0}])
+        assert score == round(1.0 / (1.0 + math.exp(-2.0)), 4)
+        assert score > settings.evidence_threshold
+        assert not should_abstain(score)
+    finally:
+        settings.embedding_provider = original_provider
+
+
+def test_lambda_provider_grounding_ignores_similarity():
+    """Lambda-provider grounding consults ONLY rerank_score; high embedding
+    similarity does not rescue a negative CrossEncoder logit."""
+    original_provider = settings.embedding_provider
+    try:
+        settings.embedding_provider = "lambda"
+        candidates = [{"rerank_score": -2.0, "similarity": 0.95, "score": 0.01}]
+        score = compute_evidence_score(candidates)
+        assert score == round(1.0 / (1.0 + math.exp(2.0)), 4)
+        assert score < settings.evidence_threshold
+        assert should_abstain(score)
+    finally:
+        settings.embedding_provider = original_provider
+
+
+def test_evidence_components_fallback_when_lexical_score_absent():
+    """Lambda-style candidates carry rerank_score but no lexical_score:
+    lexical_matched falls back to rerank_score, lexical_evidence clamps negative
+    fallbacks to 0.0, and rerank_evidence stays None (openrouter-only field)."""
+    original_provider = settings.embedding_provider
+    try:
+        settings.embedding_provider = "lambda"
+
+        parts = explain_evidence(
+            [{"rerank_score": -2.4627890586853027, "similarity": 0.450693, "score": 0.016393}]
+        )
+        assert parts["lexical_matched"] == -2.4627890586853027  # fallback to rerank_score
+        assert parts["lexical_evidence"] == 0.0
+        assert parts["similarity"] == 0.450693
+        assert abs(parts["retrieval_evidence"] - 0.12673249999999997) < 1e-6
+        assert parts["rerank_score"] == -2.4627890586853027
+        assert parts["rerank_evidence"] is None
+        assert parts["rrf_score"] == 0.016393
+        assert parts["evidence_score"] == 0.0785
+        assert parts["evidence_score"] == compute_evidence_score(
+            [{"rerank_score": -2.4627890586853027, "similarity": 0.450693, "score": 0.016393}]
+        )
+    finally:
+        settings.embedding_provider = original_provider
+
+
+def test_evidence_threshold_behavior_unchanged():
+    """should_abstain is a strict below-threshold comparison against the
+    configured evidence_threshold."""
+    original = settings.evidence_threshold
+    try:
+        settings.evidence_threshold = 0.15
+        assert should_abstain(0.0785) is True
+        assert should_abstain(0.15) is False      # equal to threshold: grounded
+        assert should_abstain(0.5) is False
+        assert should_abstain(settings.evidence_threshold - 1e-9) is True
+    finally:
+        settings.evidence_threshold = original

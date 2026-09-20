@@ -448,6 +448,7 @@ import importlib.util
 import io
 import json as _json
 import pathlib
+import sys as _sys
 import tempfile
 
 
@@ -489,11 +490,13 @@ class _FakePredictModel:
 def test_lambda_app_model_init_uses_local_files_only_and_device_cpu():
     mod = _lambda_app()
     original = mod._model
+    fake_st = MagicMock()
     try:
         mod._model = None
-        with patch.object(mod, "_verify_model_path", return_value=None), patch(
-            "sentence_transformers.CrossEncoder"
-        ) as ce_cls:
+        with patch.object(mod, "_verify_model_path", return_value=None), patch.dict(
+            _sys.modules, {"sentence_transformers": fake_st}
+        ):
+            ce_cls = fake_st.CrossEncoder
             ce_cls.return_value.predict.return_value = [0.5]
             model = mod._load_model()
 
@@ -506,11 +509,13 @@ def test_lambda_app_model_init_uses_local_files_only_and_device_cpu():
 def test_lambda_app_model_init_is_warm_singleton():
     mod = _lambda_app()
     original = mod._model
+    fake_st = MagicMock()
     try:
         mod._model = None
-        with patch.object(mod, "_verify_model_path", return_value=None), patch(
-            "sentence_transformers.CrossEncoder"
-        ) as ce_cls:
+        with patch.object(mod, "_verify_model_path", return_value=None), patch.dict(
+            _sys.modules, {"sentence_transformers": fake_st}
+        ):
+            ce_cls = fake_st.CrossEncoder
             ce_cls.return_value.predict.return_value = [0.5]
             first = mod._load_model()
             second = mod._load_model()
@@ -657,3 +662,78 @@ def test_lambda_app_handler_500_on_inference_failure():
         resp = mod.lambda_handler(_event({"query": "q", "candidates": [{"chunk_id": "a", "chunk_text": "t"}]}), None)
     assert resp["statusCode"] == 500
     assert _json.loads(resp["body"])["error"] == "rerank inference failed"
+
+
+# ---------------------------------------------------------------------------
+# RAG investigation regression guards (rerank score/metadata contract)
+# ---------------------------------------------------------------------------
+def test_lambda_reranker_preserves_scores_exactly():
+    """Lambda rerank scores are attached verbatim to the matching candidate."""
+    lam_scores = [("a", 0.7654), ("b", -1.2345)]
+    with _mock_client_patch(lambda *a, **k: _mock_response(json_data=_lambda_response(lam_scores))), patch("time.sleep"):
+        r = LambdaReranker(url="https://rerank.mock/", secret="")
+        out = r.rerank("q", _CANDIDATES, top_k=2)
+
+    assert len(out) == 2
+    by_id = {c["chunk_id"]: c for c in out}
+    assert by_id["a"]["rerank_score"] == 0.7654
+    assert by_id["b"]["rerank_score"] == -1.2345
+    assert [c["chunk_id"] for c in out] == ["a", "b"]  # sorted desc by rerank_score
+
+
+def test_lambda_reranker_preserves_original_candidate_metadata():
+    """Original retrieval fields survive the Lambda round-trip on top of rerank_score."""
+    with _mock_client_patch(lambda *a, **k: _mock_response(json_data=_lambda_response([("b", 0.9), ("a", 0.1)]))), patch("time.sleep"):
+        r = LambdaReranker(url="https://rerank.mock/", secret="")
+        out = r.rerank("q", _CANDIDATES, top_k=2)
+
+    assert len(out) == 2
+    by_id = {c["chunk_id"]: c for c in out}
+    for cid, expected in [("a", _CANDIDATES[0]), ("b", _CANDIDATES[1])]:
+        c = by_id[cid]
+        for key in ("document_id", "chunk_text", "score", "src"):
+            assert c[key] == expected[key], f"{cid}.{key} not preserved"
+
+
+def test_lambda_reranker_does_not_fabricate_lexical_score():
+    """The Lambda provider must not invent lexical_score/rerank_source; the
+    evidence breakdown relies on the documented rerank_score fallback."""
+    with _mock_client_patch(lambda *a, **k: _mock_response(json_data=_lambda_response([("a", 0.5), ("b", -1.0)]))), patch("time.sleep"):
+        r = LambdaReranker(url="https://rerank.mock/", secret="")
+        out = r.rerank("q", _CANDIDATES, top_k=2)
+
+    assert len(out) == 2
+    assert all("lexical_score" not in c for c in out)
+    assert all("rerank_source" not in c for c in out)
+
+
+def test_cross_encoder_reranker_does_not_fabricate_lexical_score():
+    """CrossEncoderReranker attaches only rerank_score (raw logit), never a
+    lexical_score or rerank_source."""
+    r = CrossEncoderReranker(model_name="test-model")
+    r._model = _FakeCrossEncoderModel([0.2, 0.8])
+    candidates = [
+        {"chunk_id": "a", "document_id": "d1", "chunk_text": "text a", "score": 0.9},
+        {"chunk_id": "b", "document_id": "d1", "chunk_text": "text b", "score": 0.4},
+    ]
+    out = r.rerank("some query", candidates, top_k=2)
+
+    assert len(out) == 2
+    assert [c["chunk_id"] for c in out] == ["b", "a"]
+    assert all("lexical_score" not in c for c in out)
+    assert all("rerank_source" not in c for c in out)
+    assert {c["chunk_id"]: c["rerank_score"] for c in out} == {"b": 0.8, "a": 0.2}
+
+
+def test_lexical_reranker_behavior_unchanged():
+    """LexicalReranker still attaches lexical_score == rerank_score (distinct
+    matched-token count) and orders by it."""
+    r = LexicalReranker()
+    out = r.rerank("metformin dosage", _CANDIDATES, top_k=2)
+
+    assert len(out) == 2
+    assert all("lexical_score" in c for c in out)
+    for c in out:
+        assert c["lexical_score"] == c["rerank_score"]
+    assert out[0]["chunk_id"] == "a"  # chunk mentioning 'metformin' ranks first
+    assert out[0]["lexical_score"] == 1.0

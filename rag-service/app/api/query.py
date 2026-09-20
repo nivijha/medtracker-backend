@@ -129,6 +129,26 @@ async def query(
     reranked = reranker.rerank(effective_query, candidates, top_k=settings.top_k)
     rerank_ms = (time.time() - t1) * 1000
 
+    # PHI-free metadata-only diagnostics: counts, ranges, and field presence.
+    # Never logs query text, candidate text, patient data, or embeddings.
+    _rerank_scores = [c["rerank_score"] for c in reranked if "rerank_score" in c]
+    _top_rerank = reranked[0].get("rerank_score") if reranked else None
+    logger.info(
+        json.dumps(
+            {
+                "event": "rerank_meta",
+                "query_id": query_id,
+                "candidate_count": len(reranked),
+                "rerank_score_present": all("rerank_score" in c for c in reranked),
+                "rerank_score_min": min(_rerank_scores) if _rerank_scores else None,
+                "rerank_score_max": max(_rerank_scores) if _rerank_scores else None,
+                "has_lexical_score": any("lexical_score" in c for c in reranked),
+                "has_similarity": any("similarity" in c for c in reranked),
+                "top_rerank_positive": (_top_rerank is not None and float(_top_rerank) > 0),
+            }
+        )
+    )
+
     evidence_score = compute_evidence_score(reranked)
     grounded = not should_abstain(evidence_score)
 
