@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     rerank_top_n: int = 30
+    reranker_provider: str = "lambda"
+    lambda_reranker_url: str = ""
+    lambda_reranker_secret: str = ""
+    reranker_connect_timeout: float = 10.0
+    reranker_read_timeout: float = 30.0
+    reranker_max_retries: int = 3
+    reranker_retry_delay_ms: int = 2000
+    reranker_retry_max_delay_ms: int = 4000
     openrouter_api_key: str = ""
     openrouter_api_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "openai/gpt-4o-mini"

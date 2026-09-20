@@ -1,0 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+sentence-transformers==5.1.0
+torch==2.8.0
+numpy

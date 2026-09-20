@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import string
+import time
 from typing import Protocol
 
 logger = logging.getLogger("rag")
+
+_RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 
 
 class Reranker(Protocol):
@@ -54,6 +58,99 @@ class CrossEncoderReranker:
             scored.append(cc)
         ranked = sorted(scored, key=lambda c: c.get("rerank_score", 0.0), reverse=True)
         return ranked[:top_k]
+
+
+class LambdaReranker:
+    """Reranker using AWS Lambda CrossEncoder inference.
+
+    Inference runs on the dedicated Lambda; sentence_transformers is
+    intentionally absent from the FastAPI image. Retries transient HTTP
+    statuses (429/502/503/504) and transient network/timeouts. On any
+    persistent failure it falls back to LexicalReranker (the existing safe
+    degraded behavior) and logs a warning.
+    """
+
+    def __init__(self, url: str, secret: str, timeout: float = 10.0) -> None:
+        self._url = url.rstrip("/")
+        self._secret = secret
+        self._timeout = timeout
+        self._fallback = LexicalReranker()
+
+    def rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+        if not candidates:
+            return []
+        try:
+            return self._call_lambda(query, candidates, top_k)
+        except Exception as e:
+            logger.warning(json.dumps({"event": "lambda_rerank_failed", "error": str(e)[:200], "fallback": "lexical"}))
+            return self._fallback.rerank(query, candidates, top_k)
+
+    def _call_lambda(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+        from .config import settings
+
+        max_attempts = max(1, int(getattr(settings, "reranker_max_retries", 3)))
+        base_delay = int(getattr(settings, "reranker_retry_delay_ms", 2000))
+        max_delay = int(getattr(settings, "reranker_retry_max_delay_ms", 4000))
+
+        payload_candidates = [
+            {"chunk_id": c["chunk_id"], "chunk_text": c["chunk_text"]}
+            for c in candidates
+        ]
+
+        headers = {"Content-Type": "application/json"}
+        if self._secret:
+            headers["X-Rerank-Secret"] = self._secret
+
+        import httpx
+
+        last_exc: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            is_last = attempt == max_attempts
+            try:
+                with httpx.Client(timeout=self._timeout) as client:
+                    resp = client.post(
+                        self._url,
+                        headers=headers,
+                        json={"query": query, "candidates": payload_candidates, "top_k": top_k},
+                    )
+                if resp.status_code in (400, 401, 403):
+                    raise RuntimeError(f"Lambda rerank failed ({resp.status_code}): {resp.text[:200]}")
+                if resp.status_code in _RETRYABLE_STATUS:
+                    if is_last:
+                        raise RuntimeError(f"Lambda rerank failed ({resp.status_code}): {resp.text[:200]}")
+                    delay = min(base_delay * (2 ** (attempt - 1)) + random.randint(0, 400), max_delay)
+                    time.sleep(delay / 1000)
+                    continue
+                if resp.status_code >= 400:
+                    raise RuntimeError(f"Lambda rerank failed ({resp.status_code}): {resp.text[:200]}")
+                data = resp.json()
+                reranked_ids = data.get("reranked")
+                if not isinstance(reranked_ids, list):
+                    raise RuntimeError("Lambda rerank response missing 'reranked' list")
+                score_by_id: dict[str, float] = {}
+                for r in reranked_ids:
+                    if isinstance(r, dict) and r.get("chunk_id") is not None and r.get("rerank_score") is not None:
+                        score_by_id[str(r["chunk_id"])] = float(r["rerank_score"])
+                result: list[dict] = []
+                for c in candidates:
+                    cid = c.get("chunk_id")
+                    if cid is not None and cid in score_by_id:
+                        cc = dict(c)
+                        cc["rerank_score"] = score_by_id[cid]
+                        result.append(cc)
+                result.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
+                return result[:top_k]
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout, httpx.ConnectError, httpx.ReadError, httpx.NetworkError) as e:
+                last_exc = e
+                if is_last:
+                    break
+                delay = min(base_delay * (2 ** (attempt - 1)) + random.randint(0, 400), max_delay)
+                time.sleep(delay / 1000)
+                continue
+
+        if last_exc is not None:
+            raise RuntimeError(f"Lambda rerank failed: {type(last_exc).__name__}: {str(last_exc)[:200]}")
+        raise RuntimeError("Lambda rerank failed after retries")
 
 
 class LexicalReranker:
@@ -167,8 +264,14 @@ class OpenRouterReranker:
 def get_default_reranker(model_name: str | None = None) -> Reranker:
     from .config import settings
 
-    provider = getattr(settings, "embedding_provider", "local")
-    if provider == "api":
+    provider = getattr(settings, "reranker_provider", "lambda")
+    if provider == "lambda":
+        url = getattr(settings, "lambda_reranker_url", "")
+        secret = getattr(settings, "lambda_reranker_secret", "")
+        if not url:
+            raise RuntimeError("lambda_reranker_url required when reranker_provider=lambda")
+        return LambdaReranker(url, secret)
+    if provider in ("openrouter", "api"):
         if getattr(settings, "openrouter_api_key", ""):
             return OpenRouterReranker(
                 api_key=settings.openrouter_api_key,
@@ -176,4 +279,8 @@ def get_default_reranker(model_name: str | None = None) -> Reranker:
                 api_url=getattr(settings, "openrouter_api_url", "https://openrouter.ai/api/v1"),
             )
         return LexicalReranker()
-    return CrossEncoderReranker(model_name or settings.reranker_model)
+    if provider == "lexical":
+        return LexicalReranker()
+    if provider in ("cross_encoder", "local"):
+        return CrossEncoderReranker(model_name or settings.reranker_model)
+    raise RuntimeError(f"unknown reranker_provider: {provider}")
