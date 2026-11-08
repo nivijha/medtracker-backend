@@ -8,6 +8,27 @@ const DATE_HINT_RE = /(\d{1,2}(?:st|nd|rd|th)?\s*(?:of\s+)?(?:jan|feb|mar|apr|ma
 
 const FOLLOW_UP_RE = /^(for|what about|and|how about|the|also)\b/i;
 
+export function getAssistantHelpIntent(text) {
+  if (!text || !text.trim()) return null;
+  const t = text.toLowerCase().trim();
+
+  if (/\bwho\s+(?:are|r)\s+you\b|\bwhat\s+is\s+your\s+(?:name|role)\b|\bintroduce\s+yourself\b/.test(t)) {
+    return "identity";
+  }
+
+  if (
+    /\bwhat\s+can\s+(?:you|i)\s+(?:do|ask)\b/.test(t) ||
+    /\bhow\s+can\s+you\s+help\b/.test(t) ||
+    /\bwhat\s+do\s+you\s+help\s+with\b/.test(t) ||
+    /\bwhat\s+are\s+you\s+able\s+to\s+do\b/.test(t) ||
+    /\bcan\s+you\s+(?:do|help)\b/.test(t)
+  ) {
+    return "capabilities";
+  }
+
+  return null;
+}
+
 export function hasReportKeyword(text) {
   if (!text) return false;
   const t = text.toLowerCase();

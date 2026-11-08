@@ -4,7 +4,7 @@ import Medication from "../models/Medication.js";
 import Report from "../models/Report.js";
 import logger from "../utils/logger.js";
 import { extractDates, isDateOnlyFollowUp } from "../utils/dateUtils.js";
-import { looksLikeDocumentQuery, isFollowUp } from "../utils/intentUtils.js";
+import { looksLikeDocumentQuery, isFollowUp, getAssistantHelpIntent } from "../utils/intentUtils.js";
 
 const INTENT_SYSTEM_PROMPT = `You are an intent classifier for a medical app chatbot.
 Analyze the user's message and return ONLY a valid JSON object – no prose, no markdown, no explanation.
@@ -39,6 +39,18 @@ Response schema (return exactly this shape):
     "medicationTime": "<string or null>"
   }
 }`;
+
+const CAPABILITIES_REPLY = `I can help with your MedTracker information:
+
+1. Appointments: schedule, view, or cancel
+2. Medications: view, add, or remove
+3. Reports: view uploaded reports and ask about their values or trends
+
+Tell me what you'd like to do, for example: "Schedule a dentist appointment for tomorrow at 6 PM."`;
+
+const OUT_OF_SCOPE_REPLY = `I'm focused on MedTracker, so I can't answer general-knowledge questions. I can help with appointments, medications, and uploaded reports, including report values and trends.
+
+What would you like help with?`;
 
 async function llamaChat(systemPrompt, userMessage) {
   const { generateGeminiText } = await import("../config/gemini.js");
@@ -86,12 +98,22 @@ export const chatWithAI = async (req, res) => {
     const { messages } = req.body;
 
     if (!messages || messages.length === 0) {
-      return res.json({ reply: "Hi! I'm your MedTracker assistant. How can I help you today?" });
+      return res.json({ reply: `Hi! I'm MedTracker AI.\n\n${CAPABILITIES_REPLY}` });
     }
 
     const userId = req.user.id;
     const userMessage = messages[messages.length - 1].content;
     const previousQuery = messages.length >= 2 ? (messages[messages.length - 2].content || null) : null;
+
+    const helpIntent = getAssistantHelpIntent(userMessage);
+    if (helpIntent === "identity") {
+      return res.json({
+        reply: `I'm MedTracker AI, your health information assistant. ${CAPABILITIES_REPLY}`,
+      });
+    }
+    if (helpIntent === "capabilities") {
+      return res.json({ reply: CAPABILITIES_REPLY });
+    }
 
     const extractedDates = extractDates(userMessage);
     let followUpInherited = false;
@@ -268,7 +290,7 @@ export const chatWithAI = async (req, res) => {
         });
       }
       return res.json({
-        reply: "Sorry, this is beyond my scope. I can only help with your MedTracker appointments, medications, reports, and other app-related tasks.",
+        reply: OUT_OF_SCOPE_REPLY,
       });
     }
 
@@ -436,7 +458,7 @@ export const chatWithAI = async (req, res) => {
     }
 
     return res.json({
-      reply: "Sorry, this is beyond my scope. I can only help with your MedTracker appointments, medications, reports, and other app-related tasks. You can also ask me about values or trends in your medical reports.",
+      reply: OUT_OF_SCOPE_REPLY,
     });
   } catch (error) {
     logger.error(`CHATBOT ERROR: ${error.message}`);

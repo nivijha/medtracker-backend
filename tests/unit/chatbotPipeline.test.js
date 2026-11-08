@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { extractDates, extractDatesWithContext, isDateOnlyFollowUp } from "../../utils/dateUtils.js";
-import { looksLikeDocumentQuery, isFollowUp } from "../../utils/intentUtils.js";
+import { looksLikeDocumentQuery, isFollowUp, getAssistantHelpIntent } from "../../utils/intentUtils.js";
 
 describe("date extraction — single and multi-date", () => {
   it("parses 23rd July → YYYY-07-23", () => {
@@ -94,5 +94,23 @@ describe("document_query intent detection", () => {
 
   it("what about the 13th? is follow-up", () => {
     expect(isFollowUp("what about the 13th?", "what does my 23rd july report say?")).toBe(true);
+  });
+});
+
+describe("assistant introduction and capabilities detection", () => {
+  it.each([
+    ["who are you?", "identity"],
+    ["what is your role?", "identity"],
+    ["what can you do for me?", "capabilities"],
+    ["waht can you do for e", "capabilities"],
+    ["hey, can you help?", "capabilities"],
+    ["what can I ask?", "capabilities"],
+  ])('recognizes "%s" as %s', (message, expected) => {
+    expect(getAssistantHelpIntent(message)).toBe(expected);
+  });
+
+  it("does not classify unrelated requests as help prompts", () => {
+    expect(getAssistantHelpIntent("Who is the prime minister of India?")).toBeNull();
+    expect(getAssistantHelpIntent("Can you schedule an appointment?")).toBeNull();
   });
 });
